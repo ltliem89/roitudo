@@ -675,8 +675,118 @@ export default function App() {
     };
   }, []);
 
+  // =========================================================================
+  // HỆ THỐNG TOOLTIP SƯ PHẠM NỔI (HỖ TRỢ HỌC SINH HIỂU RÕ CHỨC NĂNG TỪNG NÚT)
+  // =========================================================================
+  const [hoveredTooltip, setHoveredTooltip] = useState<{
+    title: string;
+    desc: string;
+    tip?: string;
+    top: number;
+    left?: number;
+    right?: number;
+  } | null>(null);
+
+  const bindTooltip = useCallback(
+    (
+      title: string,
+      desc: string,
+      tip?: string,
+      side: 'right' | 'left' = 'right'
+    ) => {
+      const fullNativeTitle = tip ? `${title} — ${desc} (${tip})` : `${title} — ${desc}`;
+      const show = (el: HTMLElement | null) => {
+        if (!el || checkIsMobileViewport()) return;
+        const rect = el.getBoundingClientRect();
+        const clampedTop = Math.max(12, Math.min(window.innerHeight - 135, rect.top - 4));
+        if (side === 'right') {
+          setHoveredTooltip({
+            title,
+            desc,
+            tip,
+            top: clampedTop,
+            left: Math.min(window.innerWidth - 290, rect.right + 10),
+          });
+        } else {
+          setHoveredTooltip({
+            title,
+            desc,
+            tip,
+            top: clampedTop,
+            right: Math.max(12, window.innerWidth - rect.left + 10),
+          });
+        }
+      };
+      return {
+        title: fullNativeTitle,
+        onMouseEnter: (e: React.MouseEvent<HTMLElement>) => show(e.currentTarget),
+        onMouseLeave: () => setHoveredTooltip(null),
+        onFocus: (e: React.FocusEvent<HTMLElement>) => show(e.currentTarget),
+        onBlur: () => setHoveredTooltip(null),
+        onClickCapture: () => setHoveredTooltip(null),
+      };
+    },
+    [checkIsMobileViewport]
+  );
+
+  const MODE_TOOLTIP_INFO: Record<
+    C3TimerMode,
+    { title: string; desc: string; tip: string }
+  > = {
+    A: {
+      title: 'MODE A — Đo thời gian chắn tia tại Cổng A',
+      desc: 'Chỉ kích hoạt Cổng quang điện A. Đồng hồ bắt đầu đếm khi mép dưới trụ thép chắn tia hồng ngoại A và dừng khi trụ thép thoát khỏi tia A.',
+      tip: 'Ứng dụng: Tính vận tốc tức thời tại vị trí A theo vA ≈ d / tA',
+    },
+    B: {
+      title: 'MODE B — Đo thời gian chắn tia tại Cổng B',
+      desc: 'Chỉ kích hoạt Cổng quang điện B. Đo khoảng thời gian ΔtB mà trụ thép đi qua và chắn chùm tia hồng ngoại tại cổng B.',
+      tip: 'Ứng dụng: Tính vận tốc tức thời tại vị trí B theo vB ≈ d / tB',
+    },
+    'A+B': {
+      title: 'MODE A + B — Tổng thời gian chắn tia tại A và B',
+      desc: 'Kích hoạt cả 2 cổng A và B để đo riêng thời gian chắn tia tA và tB, sau đó hiển thị tổng t = tA + tB.',
+      tip: 'Lưu ý: Đây là tổng 2 khoảng thời gian chắn tia, KHÔNG phải thời gian rơi từ A đến B',
+    },
+    'A<->B': {
+      title: 'MODE A ↔ B — Đo thời gian rơi từ A đến B (Bài 11)',
+      desc: 'Bắt đầu đếm (START) khi nhận tín hiệu tại kênh A và dừng đếm (STOP) khi trụ thép đi qua Cổng quang điện B.',
+      tip: 'Công thức xác định gia tốc rơi tự do: g = 2s / t²',
+    },
+    T: {
+      title: 'MODE T — Đo chu kì chuyển động tuần hoàn (T)',
+      desc: 'Đo khoảng thời gian giữa 2 sự kiện tương ứng liên tiếp tại Cổng A của một dao động hoặc chuyển động tuần hoàn.',
+      tip: 'Đồng hồ cần nhận đủ 2 sự kiện liên tiếp để hiển thị chu kì T',
+    },
+  };
+
   return (
     <div className="relative flex flex-row w-full h-full bg-slate-950 text-slate-100 overflow-hidden select-none">
+      {/* Thẻ Tooltip Sư Phạm Nổi (Không bao giờ bị che cắt bởi thanh cuộn sidebar) */}
+      {hoveredTooltip && !isUiHiddenZen && (
+        <div
+          role="tooltip"
+          style={{
+            top: hoveredTooltip.top,
+            left: hoveredTooltip.left,
+            right: hoveredTooltip.right,
+          }}
+          className="hidden md:flex fixed z-50 pointer-events-none w-72 p-3 rounded-xl bg-slate-950/98 border border-sky-400/80 shadow-2xl flex-col gap-1.5 text-xs"
+        >
+          <div className="font-display font-bold text-sky-300 leading-snug flex items-center gap-1.5">
+            <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>{hoveredTooltip.title}</span>
+          </div>
+          <p className="text-slate-200 text-[11px] leading-relaxed">
+            {hoveredTooltip.desc}
+          </p>
+          {hoveredTooltip.tip && (
+            <div className="pt-1 border-t border-slate-800 text-[10px] font-mono-tabular text-amber-300 leading-snug">
+              {hoveredTooltip.tip}
+            </div>
+          )}
+        </div>
+      )}
       {/* =====================================================================
           1. CỘT DỌC BÊN TRÁI: ĐỒNG HỒ HIỆN SỐ MC964 (CỔNG A TRÊN / B DƯỚI,
              5 CHẾ ĐỘ MODE A, B, A+B, A↔B, T) + NÚT THAO TÁC & CAM BÁM RƠI
@@ -733,7 +843,11 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setShowModeGuide((v) => !v)}
-                    title="Xem giải thích nguyên lí chế độ MODE đang chọn"
+                    {...bindTooltip(
+                      'Giải thích chế độ MODE (?)',
+                      'Mở hoặc đóng hộp hướng dẫn tóm tắt nguyên lí hoạt động, cổng tham gia và điều kiện Bắt đầu / Kết thúc của chế độ MODE đang chọn.',
+                      `Chế độ hiện tại: MODE ${snapshot.c3Mode === 'A<->B' ? 'A↔B' : snapshot.c3Mode}`
+                    )}
                     className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold border ${
                       showModeGuide
                         ? 'bg-sky-600 text-white border-sky-300'
@@ -912,6 +1026,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleCycleTimerMode}
+                  {...bindTooltip(
+                    'Nút chuyển vòng MODE ↻',
+                    'Chuyển đổi tuần tự qua 5 chế độ đo thời gian của đồng hồ hiện số MC964: A → B → A+B → A↔B → T.',
+                    'Tương đương nút MODE vật lí trên mặt đồng hồ 3D'
+                  )}
                   className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 text-[10px] font-mono-tabular border border-slate-700"
                 >
                   Nút MODE ↻
@@ -920,11 +1039,13 @@ export default function App() {
               <div className="grid grid-cols-5 gap-1 font-mono-tabular">
                 {(['A', 'B', 'A+B', 'A<->B', 'T'] as C3TimerMode[]).map((m) => {
                   const isSel = snapshot.c3Mode === m;
+                  const info = MODE_TOOLTIP_INFO[m];
                   return (
                     <button
                       key={m}
                       type="button"
                       onClick={() => handleSelectTimerMode(m)}
+                      {...bindTooltip(info.title, info.desc, info.tip)}
                       className={`min-h-[32px] py-1 rounded-lg text-xs font-bold border transition-all ${
                         isSel
                           ? 'bg-sky-600 text-white border-sky-300 shadow-md scale-[1.02]'
@@ -949,6 +1070,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setShowPortConfigDetails((v) => !v)}
+                  {...bindTooltip(
+                    'Chi tiết dây & Cắm/rút cổng tín hiệu',
+                    'Mở rộng để kiểm tra vị trí cổng quang sA, sB, thực hành cắm/rút giắc tín hiệu 3D hoặc chuyển đổi sơ đồ đấu nối.',
+                    'Hỗ trợ kiểm nghiệm lỗi khi quên cắm dây cổng A hoặc B'
+                  )}
                   className="text-[10px] text-sky-400 hover:underline font-medium flex items-center gap-0.5"
                 >
                   <span>{showPortConfigDetails ? 'Ẩn chi tiết' : 'Chi tiết dây'}</span>
@@ -963,7 +1089,11 @@ export default function App() {
               {/* ĐẦU NỐI A Ở PHÍA TRÊN (Bấm vào để chọn Cổng quang A) */}
               <div
                 onClick={() => handleSelectTimerMode(snapshot.c3Mode === 'A' ? 'A<->B' : 'A')}
-                title="Bấm để chọn Cổng quang điện A (hiện Cổng A và ký hiệu A)"
+                {...bindTooltip(
+                  'CỔNG QUANG A (Đầu nối kênh A phía trên)',
+                  'Nhận tín hiệu bắt đầu (START) hoặc đo thời gian chắn tia tA tại Cổng quang điện A. Bấm vào thẻ này để chọn nhanh Cổng A (hiện Cổng A và ký hiệu A trên giá đỡ).',
+                  `Trạng thái hiện tại: ${PORT_STATE_LABELS[snapshot.portAState]}`
+                )}
                 className={`p-1.5 rounded-lg border flex flex-col gap-1 cursor-pointer transition-colors ${
                   snapshot.c3Mode === 'A' || snapshot.c3Mode === 'A+B' || snapshot.c3Mode === 'A<->B' || snapshot.c3Mode === 'T'
                     ? 'bg-red-950/35 border-red-500/60 hover:bg-red-950/50'
@@ -1014,6 +1144,11 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleTogglePortAConnected}
+                      {...bindTooltip(
+                        snapshot.portAConnected ? 'Rút dây Cổng A' : 'Cắm dây Cổng A',
+                        'Mô phỏng thao tác cắm hoặc rút phích cắm 3D màu đỏ tại ổ IN A trên mặt đồng hồ MC964.',
+                        'Nếu rút dây khi cần đo kênh A, đồng hồ sẽ báo lỗi thiếu tín hiệu'
+                      )}
                       className={`px-1.5 py-0.5 rounded font-medium border shrink-0 ${
                         snapshot.portAConnected
                           ? 'bg-slate-800 text-emerald-300 border-emerald-700/60'
@@ -1029,7 +1164,11 @@ export default function App() {
               {/* ĐẦU NỐI B Ở PHÍA DƯỚI (Bấm vào để chọn Cổng quang B) */}
               <div
                 onClick={() => handleSelectTimerMode(snapshot.c3Mode === 'B' ? 'A<->B' : 'B')}
-                title="Bấm để chọn Cổng quang điện B (hiện Cổng B và ký hiệu B)"
+                {...bindTooltip(
+                  'CỔNG QUANG B (Đầu nối kênh B phía dưới)',
+                  'Nhận tín hiệu kết thúc (STOP) trong chế độ A↔B hoặc đo thời gian chắn tia tB tại Cổng quang điện B. Bấm vào thẻ này để chọn nhanh Cổng B.',
+                  `Trạng thái hiện tại: ${PORT_STATE_LABELS[snapshot.portBState]}`
+                )}
                 className={`p-1.5 rounded-lg border flex flex-col gap-1 cursor-pointer transition-colors ${
                   snapshot.c3Mode === 'B' || snapshot.c3Mode === 'A+B' || snapshot.c3Mode === 'A<->B'
                     ? 'bg-sky-950/35 border-sky-500/60 hover:bg-sky-950/50'
@@ -1080,6 +1219,11 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleTogglePhotogateConnected}
+                      {...bindTooltip(
+                        snapshot.portBConnected ? 'Rút dây Cổng B' : 'Cắm dây Cổng B',
+                        'Mô phỏng thao tác cắm hoặc rút phích cắm 3D màu xanh dương tại ổ IN B trên mặt đồng hồ MC964.',
+                        'Nếu rút dây Cổng B trong chế độ A↔B, đồng hồ sẽ không dừng tự động khi vật đi qua'
+                      )}
                       className={`px-1.5 py-0.5 rounded font-medium border shrink-0 ${
                         snapshot.portBConnected
                           ? 'bg-slate-800 text-emerald-300 border-emerald-700/60'
@@ -1102,6 +1246,11 @@ export default function App() {
                         snapshot.wiringVariant === 'SGK_KNTT' ? 'C3_MC964' : 'SGK_KNTT'
                       )
                     }
+                    {...bindTooltip(
+                      'Chuyển đổi sơ đồ đấu nối thí nghiệm',
+                      'Đổi giữa cấu hình Bài 11 SGK (Kênh A nhận xung từ công tắc thả vật t=0, Kênh B nhận xung từ cổng quang) và cấu hình 2 cổng quang điện độc lập A – B.',
+                      'Giúp học sinh hiểu rõ vai trò của từng kênh trong các biến thể thí nghiệm'
+                    )}
                     className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-sky-300 font-semibold"
                   >
                     {snapshot.wiringVariant === 'SGK_KNTT'
@@ -1122,6 +1271,13 @@ export default function App() {
                   snapshot.phase === 'FALLING_TIMER_RUNNING' ||
                   snapshot.phase === 'PHOTOGATE_TRIGGERED'
                 }
+                {...bindTooltip(
+                  snapshot.cylinderAttachedToMagnet
+                    ? 'Nhả trụ thép (Bắt đầu thả rơi)'
+                    : 'Thực hiện lại phép đo (Thả lại)',
+                  'Tác động vào công tắc kép để ngắt dòng điện qua nam châm điện, thả trụ thép rơi tự do không vận tốc đầu (v0 = 0) dọc theo dây dọi.',
+                  'Tự động đặt lại trụ thép và RESET đồng hồ nếu đang ở trạng thái hoàn tất'
+                )}
                 className="w-full min-h-[42px] px-3 py-2 rounded-lg font-bold text-xs sm:text-sm flex items-center justify-center gap-2 border transition-colors whitespace-nowrap disabled:opacity-40 bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-300 shadow-lg"
               >
                 <Play className="w-4 h-4 shrink-0 fill-current" />
@@ -1137,6 +1293,11 @@ export default function App() {
                   type="button"
                   onClick={handleStartStopTimer}
                   disabled={!snapshot.powerOn}
+                  {...bindTooltip(
+                    'Nút START / STOP (Đếm / Dừng thủ công)',
+                    'Bắt đầu hoặc dừng bộ đếm thời gian của đồng hồ hiện số MC964 bằng tay để kiểm tra độ ổn định xung nhịp 1000 Hz (0,001 s).',
+                    'Trong khi thả rơi tự động, đồng hồ sẽ tự START/STOP theo tín hiệu cổng A và B'
+                  )}
                   className="min-h-[36px] px-2 py-1 rounded-lg bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white border border-sky-400 font-bold text-[11px] flex items-center justify-center"
                 >
                   START/STOP
@@ -1146,6 +1307,11 @@ export default function App() {
                   type="button"
                   onClick={handleResetTimer}
                   disabled={!snapshot.powerOn}
+                  {...bindTooltip(
+                    'Nút RESET (Đưa đồng hồ về 0,000 s)',
+                    'Xóa số đo hiện tại trên màn hình LED về 0.000 s và đặt lại trạng thái chờ tín hiệu READY cho các cổng.',
+                    'Không làm mất các lần đo đã lưu trong Bảng số liệu'
+                  )}
                   className="min-h-[36px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-100 border border-slate-700 font-semibold text-[11px] flex items-center justify-center gap-1"
                 >
                   <RotateCcw className="w-3.5 h-3.5 shrink-0 text-sky-300" />
@@ -1156,6 +1322,11 @@ export default function App() {
                   type="button"
                   onClick={handleAttachCylinder}
                   disabled={!snapshot.powerOn || snapshot.cylinderAttachedToMagnet}
+                  {...bindTooltip(
+                    'Đặt trụ thép lên nam châm điện',
+                    'Đưa trụ thép từ khay hứng phía dưới lên gắn vào lõi nam châm điện tại mốc xuất phát s = 0,0 cm.',
+                    'Học sinh cũng có thể dùng chuột/ngón tay kéo trực tiếp trụ thép 3D lên nam châm'
+                  )}
                   className="min-h-[36px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-100 border border-slate-700 font-semibold text-[11px] flex items-center justify-center gap-1"
                 >
                   <Magnet className="w-3.5 h-3.5 shrink-0 text-sky-400" />
@@ -1168,6 +1339,11 @@ export default function App() {
                   type="button"
                   onClick={handleRecordResult}
                   disabled={snapshot.completedMeasurementSeconds === null}
+                  {...bindTooltip(
+                    'Ghi kết quả vào Bảng số liệu',
+                    'Ghi nhận giá trị thời gian rơi t vừa đo được ứng với quãng đường s hiện tại vào Bảng 11.1 để tự động tính t̄, t̄² và gia tốc g.',
+                    'Chỉ sáng lên sau khi hoàn tất một lượt đo hợp lệ'
+                  )}
                   className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 border transition-colors whitespace-nowrap disabled:opacity-40 ${
                     snapshot.completedMeasurementSeconds !== null
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 shadow-md'
@@ -1181,6 +1357,13 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleTogglePower}
+                  {...bindTooltip(
+                    'Công tắc nguồn chính (POWER)',
+                    'Bật hoặc tắt nguồn điện 220V AC / 12V DC cấp cho đồng hồ đo thời gian hiện số MC964, đèn hồng ngoại cổng quang và nam châm điện.',
+                    snapshot.powerOn
+                      ? 'Đang BẬT: Nếu tắt nguồn, nam châm sẽ mất từ tính và nhả trụ thép'
+                      : 'Đang TẮT: Hãy bật nguồn trước khi gắn trụ thép và đo'
+                  )}
                   className={`min-h-[36px] px-2.5 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 border transition-colors whitespace-nowrap ${
                     snapshot.powerOn
                       ? 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border-emerald-600/60'
@@ -1220,7 +1403,11 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setAutoTrackFall((v) => !v)}
-                  title="Tự động điều chỉnh khoảng cách camera tối ưu khi vật rơi"
+                  {...bindTooltip(
+                    'Camera tự động bám theo vật rơi',
+                    'Khi BẬT, camera 3D tự động căn chỉnh khoảng cách tối ưu và lia theo trụ thép trong suốt quá trình rơi từ nam châm xuống khay hứng.',
+                    'Tắt nếu bạn muốn giữ cố định một góc nhìn cận cảnh'
+                  )}
                   className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 border transition-colors ${
                     autoTrackFall
                       ? 'bg-emerald-600/90 text-white border-emerald-400'
@@ -1234,14 +1421,34 @@ export default function App() {
 
               <div className="grid grid-cols-3 gap-1">
                 {[
-                  { speed: 1, label: '1x Thực' },
-                  { speed: 0.25, label: '0.25x Chậm' },
-                  { speed: 0.1, label: '0.1x Siêu' },
+                  {
+                    speed: 1,
+                    label: '1x Thực',
+                    title: 'Tốc độ 1x (Thời gian thực)',
+                    desc: 'Mô phỏng quá trình rơi tự do đúng theo tốc độ thực tế ngoài đời.',
+                  },
+                  {
+                    speed: 0.25,
+                    label: '0.25x Chậm',
+                    title: 'Quay chậm 0.25x (Chậm 4 lần)',
+                    desc: 'Làm chậm chuyển động rơi 4 lần để học sinh quan sát rõ lúc trụ thép đi qua tia hồng ngoại của cổng quang.',
+                  },
+                  {
+                    speed: 0.1,
+                    label: '0.1x Siêu',
+                    title: 'Quay siêu chậm 0.1x (Chậm 10 lần)',
+                    desc: 'Làm chậm chuyển động 10 lần để phân tích chi tiết thời điểm bắt đầu chắn tia và thoát khỏi tia quang điện.',
+                  },
                 ].map((item) => (
                   <button
                     key={item.speed}
                     type="button"
                     onClick={() => setPlaybackSpeed(item.speed)}
+                    {...bindTooltip(
+                      item.title,
+                      item.desc,
+                      'Kết quả thời gian đo trên đồng hồ vẫn giữ nguyên độ chính xác vật lí'
+                    )}
                     className={`min-h-[28px] px-1.5 py-1 rounded text-[11px] font-medium transition-colors whitespace-nowrap ${
                       playbackSpeed === item.speed
                         ? 'bg-amber-500 text-slate-950 font-bold shadow'
@@ -1312,8 +1519,12 @@ export default function App() {
             <button
               type="button"
               onClick={toggleSound}
-              title="Bật/tắt âm hiệu ứng công tắc, bíp đồng hồ"
               aria-label="Bật tắt âm hiệu ứng"
+              {...bindTooltip(
+                'Âm thanh hiệu ứng thiết bị',
+                'Bật hoặc tắt tiếng tách cơ khí khi đóng/ngắt công tắc, tiếng bíp đồng hồ MC964 và tiếng trụ thép chạm khay hứng.',
+                soundEnabled ? 'Trạng thái: Đang BẬT' : 'Trạng thái: Đang TẮT'
+              )}
               className="min-h-[30px] px-1.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-1 text-[10px]"
             >
               {soundEnabled ? (
@@ -1327,8 +1538,12 @@ export default function App() {
             <button
               type="button"
               onClick={toggleAmbience}
-              title="Bật/tắt độc lập âm thanh nền phòng thí nghiệm (tiếng quạt nhẹ & nhiễu điện 50Hz)"
               aria-label="Bật tắt âm thanh nền phòng thí nghiệm"
+              {...bindTooltip(
+                'Âm thanh nền phòng thí nghiệm (Độc lập)',
+                'Mô phỏng tiếng quạt thông gió nhẹ và tiếng rung điện từ 50Hz rất nhỏ của nguồn biến áp / nam châm điện để tăng cảm giác chân thực.',
+                'Có thể bật/tắt hoàn toàn độc lập với âm hiệu ứng'
+              )}
               className={`min-h-[30px] px-1.5 py-1 rounded-lg border flex items-center justify-center gap-1 text-[10px] transition-colors ${
                 ambienceEnabled
                   ? 'bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border-emerald-500/60 font-semibold'
@@ -1347,6 +1562,11 @@ export default function App() {
               type="button"
               onClick={handleToggleFullscreenOrExpand}
               aria-label="Toàn màn hình"
+              {...bindTooltip(
+                'Chế độ Toàn màn hình (Fullscreen)',
+                'Mở rộng không gian phòng thí nghiệm 3D ra toàn bộ màn hình thiết bị để quan sát rõ hơn.',
+                'Nhấn lại hoặc phím ESC để thu nhỏ'
+              )}
               className="min-h-[30px] px-1.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center justify-center gap-1 text-[10px]"
             >
               {isExpandedViewport ? (
@@ -1360,6 +1580,11 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsUiHiddenZen(true)}
+              {...bindTooltip(
+                'Ẩn toàn bộ bảng điều khiển (Zen Mode)',
+                'Tạm ẩn cả 2 cột menu trái và phải để dành 100% màn hình cho bộ thí nghiệm 3D.',
+                'Phím tắt: Nhấn phím H để ẩn/hiện nhanh'
+              )}
               className="min-h-[30px] px-1.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] font-medium flex items-center justify-center gap-1"
             >
               <EyeOff className="w-3.5 h-3.5 text-sky-400 shrink-0" />
@@ -2156,6 +2381,12 @@ export default function App() {
                   value={snapshot.gateADistanceMeters}
                   onChange={(e) => handleChangeGateADistance(parseFloat(e.target.value))}
                   aria-label="Kéo chỉnh vị trí cổng quang điện A"
+                  {...bindTooltip(
+                    'Thanh trượt vị trí Cổng quang điện A (sA)',
+                    'Dịch chuyển Cổng quang điện A dọc theo thước thẳng từ 5 cm đến 50 cm tính từ đáy nam châm điện.',
+                    'Bạn cũng có thể nắm kéo trực tiếp Cổng A màu đỏ trên mô hình 3D',
+                    'left'
+                  )}
                   className="w-full accent-red-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
                 />
 
@@ -2165,6 +2396,12 @@ export default function App() {
                       key={presetSA}
                       type="button"
                       onClick={() => handleChangeGateADistance(presetSA)}
+                      {...bindTooltip(
+                        `Đặt Cổng quang A tại sA = ${(presetSA * 100).toFixed(0)} cm`,
+                        `Di chuyển nhanh Cổng quang điện A tới vạch ${(presetSA * 100).toFixed(0)} cm (${presetSA.toFixed(2)} m) trên thước đo.`,
+                        undefined,
+                        'left'
+                      )}
                       className={`min-h-[24px] py-0.5 rounded font-mono-tabular text-[10px] font-medium border ${
                         Math.abs(snapshot.gateADistanceMeters - presetSA) < 0.002
                           ? 'bg-red-600 text-white border-red-300 font-bold'
@@ -2203,6 +2440,12 @@ export default function App() {
                   value={snapshot.photogateDistanceMeters}
                   onChange={(e) => handleChangePhotogateDistance(parseFloat(e.target.value))}
                   aria-label="Kéo chỉnh quãng đường rơi s tại cổng B"
+                  {...bindTooltip(
+                    'Thanh trượt quãng đường rơi s (Cổng quang B)',
+                    'Thay đổi vị trí Cổng quang điện B từ 10 cm đến 80 cm để khảo sát sự phụ thuộc của thời gian rơi t vào quãng đường s.',
+                    'Mẹo: Đo ở nhiều mốc s (20, 30, 40, 50, 60 cm) để vẽ đồ thị s – t²',
+                    'left'
+                  )}
                   className="w-full accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
                 />
 
@@ -2212,6 +2455,12 @@ export default function App() {
                       key={presetS}
                       type="button"
                       onClick={() => handleChangePhotogateDistance(presetS)}
+                      {...bindTooltip(
+                        `Chọn nhanh quãng đường s = ${(presetS * 100).toFixed(0)} cm`,
+                        `Đặt Cổng quang điện B chính xác tại mốc s = ${presetS.toFixed(2)} m (${(presetS * 100).toFixed(0)} cm) theo quy trình SGK Vật lí 10.`,
+                        `Thời gian rơi lí thuyết: t ≈ ${Math.sqrt((2 * presetS) / physicsConfig.trueGravity).toFixed(3)} s`,
+                        'left'
+                      )}
                       className={`min-h-[26px] py-0.5 rounded font-mono-tabular text-[11px] font-medium border ${
                         Math.abs(snapshot.photogateDistanceMeters - presetS) < 0.002
                           ? 'bg-amber-500 text-slate-950 border-amber-300 font-bold'
@@ -2229,6 +2478,12 @@ export default function App() {
                     onClick={() =>
                       handleChangePhotogateDistance(snapshot.photogateDistanceMeters - 0.01)
                     }
+                    {...bindTooltip(
+                      'Dịch Cổng B lên 1 cm (-1 cm)',
+                      'Giảm quãng đường rơi s đi 10 mm (0,010 m).',
+                      undefined,
+                      'left'
+                    )}
                     className="py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-mono-tabular text-[10px] border border-slate-800"
                   >
                     -1cm
@@ -2238,6 +2493,12 @@ export default function App() {
                     onClick={() =>
                       handleChangePhotogateDistance(snapshot.photogateDistanceMeters - 0.001)
                     }
+                    {...bindTooltip(
+                      'Vi chỉnh Cổng B lên 1 mm (-1 mm)',
+                      'Tinh chỉnh vị trí Cổng quang B từng milimet (0,001 m) đúng độ chia nhỏ nhất của thước.',
+                      undefined,
+                      'left'
+                    )}
                     className="py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-mono-tabular text-[10px] border border-slate-800"
                   >
                     -1mm
@@ -2247,6 +2508,12 @@ export default function App() {
                     onClick={() =>
                       handleChangePhotogateDistance(snapshot.photogateDistanceMeters + 0.001)
                     }
+                    {...bindTooltip(
+                      'Vi chỉnh Cổng B xuống 1 mm (+1 mm)',
+                      'Tinh chỉnh tăng quãng đường rơi s thêm 1 milimet (0,001 m).',
+                      undefined,
+                      'left'
+                    )}
                     className="py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-mono-tabular text-[10px] border border-slate-800"
                   >
                     +1mm
@@ -2256,6 +2523,12 @@ export default function App() {
                     onClick={() =>
                       handleChangePhotogateDistance(snapshot.photogateDistanceMeters + 0.01)
                     }
+                    {...bindTooltip(
+                      'Dịch Cổng B xuống 1 cm (+1 cm)',
+                      'Tăng quãng đường rơi s thêm 10 mm (0,010 m).',
+                      undefined,
+                      'left'
+                    )}
                     className="py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 font-mono-tabular text-[10px] border border-slate-800"
                   >
                     +1cm
@@ -2275,15 +2548,48 @@ export default function App() {
                     id: 'TABLE',
                     label: `Bảng số liệu (${tableComputed.summary.totalTrialsCount})`,
                     icon: Table2,
+                    tipTitle: 'Bảng số liệu thực nghiệm (Bảng 11.1 SGK)',
+                    tipDesc:
+                      'Xem bảng tổng hợp các lần đo t1, t2, t3..., giá trị trung bình t̄, bình phương t̄², gia tốc g = 2s/t̄² và sai số tuyệt đối Δg.',
                   },
-                  { id: 'GRAPH', label: 'Đồ thị s – t²', icon: LineChart },
-                  { id: 'CONTROLS', label: 'Chỉnh cổng A / B', icon: Sliders },
-                  { id: 'THEORY', label: 'Lí thuyết & Câu hỏi', icon: HelpCircle },
-                  { id: 'SETTINGS_TESTS', label: 'Cài đặt & Test A–Q', icon: Settings },
+                  {
+                    id: 'GRAPH',
+                    label: 'Đồ thị s – t²',
+                    icon: LineChart,
+                    tipTitle: 'Đồ thị phụ thuộc s theo t² & Hồi quy tuyến tính',
+                    tipDesc:
+                      'Biểu diễn các điểm thực nghiệm trên hệ trục (t², s). Hệ số góc của đường thẳng nối gốc tọa độ cho biết g ≈ 2·k.',
+                  },
+                  {
+                    id: 'CONTROLS',
+                    label: 'Chỉnh cổng A / B',
+                    icon: Sliders,
+                    tipTitle: 'Bảng điều khiển chi tiết Cổng quang A, B & Độ lệch ngang',
+                    tipDesc:
+                      'Tinh chỉnh chính xác tọa độ sA, sB và kiểm nghiệm hiện tượng trụ thép rơi lệch tâm chùm tia hồng ngoại.',
+                  },
+                  {
+                    id: 'THEORY',
+                    label: 'Lí thuyết & Câu hỏi',
+                    icon: HelpCircle,
+                    tipTitle: 'Cơ sở lí thuyết, Quy trình thí nghiệm & Câu hỏi báo cáo',
+                    tipDesc:
+                      'Ôn tập công thức s = ½gt², quy trình 5 bước chuẩn SGK Vật lí 10 và trả lời các câu hỏi thảo luận.',
+                  },
+                  {
+                    id: 'SETTINGS_TESTS',
+                    label: 'Cài đặt & Test A–Q',
+                    icon: Settings,
+                    tipTitle: 'Cài đặt mô hình vật lí & Chạy 17 bài kiểm thử (Test A–Q)',
+                    tipDesc:
+                      'Tùy chỉnh gia tốc g chuẩn theo vĩ độ, lực cản không khí, nhiễu cảm biến và chạy bộ kiểm thử tự động 5 chế độ đồng hồ MC964.',
+                  },
                 ] as {
                   id: ActiveDrawerTab;
                   label: string;
                   icon: React.ComponentType<{ className?: string }>;
+                  tipTitle: string;
+                  tipDesc: string;
                 }[]
               ).map((tab) => {
                 const IconComp = tab.icon;
@@ -2296,6 +2602,7 @@ export default function App() {
                       setActiveDrawer(isActive ? 'NONE' : tab.id);
                       if (checkIsMobileViewport()) setIsRightPanelOpen(false);
                     }}
+                    {...bindTooltip(tab.tipTitle, tab.tipDesc, undefined, 'left')}
                     className={`w-full min-h-[36px] px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 border transition-colors ${
                       isActive
                         ? 'bg-sky-600 text-white border-sky-400 shadow'
@@ -2318,13 +2625,54 @@ export default function App() {
               <div className="grid grid-cols-2 gap-1">
                 {(
                   [
-                    { id: 'OVERVIEW', label: 'Trọn bộ' },
-                    { id: 'MEASUREMENT_ANGLE', label: 'Đọc thước' },
-                    { id: 'CLOSEUP_PHOTOGATE', label: 'Cổng B' },
-                    { id: 'CLOSEUP_MAGNET', label: 'Cổng A' },
-                    { id: 'CLOSEUP_TIMER', label: 'Đồng hồ' },
-                    { id: 'CLOSEUP_SWITCH', label: 'Công tắc' },
-                  ] as { id: CameraPresetId; label: string }[]
+                    {
+                      id: 'OVERVIEW',
+                      label: 'Trọn bộ',
+                      tipTitle: 'Góc nhìn Trọn bộ thí nghiệm',
+                      tipDesc:
+                        'Quan sát toàn cảnh giá đỡ, nam châm điện, cổng quang A/B, công tắc kép và đồng hồ hiện số MC964.',
+                    },
+                    {
+                      id: 'MEASUREMENT_ANGLE',
+                      label: 'Đọc thước',
+                      tipTitle: 'Góc nhìn trực diện Đọc thước (Chống sai số thị sai)',
+                      tipDesc:
+                        'Đặt mắt vuông góc với mặt phẳng thước chia milimet để đọc chính xác vị trí cổng quang điện.',
+                    },
+                    {
+                      id: 'CLOSEUP_PHOTOGATE',
+                      label: 'Cổng B',
+                      tipTitle: 'Góc nhìn cận cảnh Cổng quang điện B',
+                      tipDesc:
+                        'Quan sát sát chùm tia hồng ngoại và kim chỉ vạch thước của Cổng quang điện B phía dưới.',
+                    },
+                    {
+                      id: 'CLOSEUP_MAGNET',
+                      label: 'Cổng A',
+                      tipTitle: 'Góc nhìn cận cảnh Nam châm điện & Cổng A',
+                      tipDesc:
+                        'Quan sát chi tiết trụ thép gắn tại nam châm điện (mốc 0) và Cổng quang điện A phía trên.',
+                    },
+                    {
+                      id: 'CLOSEUP_TIMER',
+                      label: 'Đồng hồ',
+                      tipTitle: 'Góc nhìn cận cảnh Đồng hồ hiện số MC964',
+                      tipDesc:
+                        'Quan sát rõ màn hình LED 7 đoạn, các nút POWER / RESET / MODE và cụm phích cắm dây dẫn Cổng A, B.',
+                    },
+                    {
+                      id: 'CLOSEUP_SWITCH',
+                      label: 'Công tắc',
+                      tipTitle: 'Góc nhìn cận cảnh Công tắc kép',
+                      tipDesc:
+                        'Quan sát cơ cấu cần gạt công tắc kép điều khiển ngắt điện nam châm và phát xung kích hoạt t = 0.',
+                    },
+                  ] as {
+                    id: CameraPresetId;
+                    label: string;
+                    tipTitle: string;
+                    tipDesc: string;
+                  }[]
                 ).map((preset) => (
                   <button
                     key={preset.id}
@@ -2333,6 +2681,7 @@ export default function App() {
                       setCameraPreset(preset.id);
                       if (checkIsMobileViewport()) setIsRightPanelOpen(false);
                     }}
+                    {...bindTooltip(preset.tipTitle, preset.tipDesc, undefined, 'left')}
                     className={`min-h-[28px] px-1.5 py-1 rounded text-[11px] font-medium border truncate ${
                       cameraPreset === preset.id
                         ? 'bg-sky-600 text-white border-sky-400 font-semibold'
@@ -2351,6 +2700,12 @@ export default function App() {
             <button
               type="button"
               onClick={() => setShowScientificVisuals((v) => !v)}
+              {...bindTooltip(
+                'Hiệu ứng Vệt hoạt nghiệm (Stroboscopic) & Véc-tơ vận tốc',
+                'Hiển thị các bóng mờ vị trí trụ thép sau những khoảng thời gian bằng nhau (Δt = 0,025 s) và mũi tên véc-tơ vận tốc v tăng dần đều khi rơi.',
+                'Giúp trực quan hóa tính chất nhanh dần đều của chuyển động rơi tự do',
+                'left'
+              )}
               className={`w-full min-h-[32px] px-2 py-1 rounded-lg text-[11px] font-medium border flex items-center justify-center ${
                 showScientificVisuals
                   ? 'bg-amber-600/20 text-amber-300 border-amber-500/50'

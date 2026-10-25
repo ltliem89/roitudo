@@ -5,7 +5,6 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
   Eye,
   EyeOff,
-  Hand,
 } from 'lucide-react';
 import {
   ExperimentSnapshot,
@@ -114,17 +113,6 @@ function computeFullApparatusOverviewPose(fovDeg: number, aspect: number): {
     target: [0.03, 0.50, 0.05],
   };
 }
-
-const HOVER_ACTION_HINTS: Record<string, string> = {
-  DRAG_PHOTOGATE_A: 'Kéo lên/xuống để chỉnh vị trí Cổng quang điện A (s_A)',
-  DRAG_PHOTOGATE: 'Kéo lên/xuống để chỉnh vị trí Cổng quang điện B (s)',
-  DRAG_CYLINDER: 'Kéo thả Trụ thép (Kéo lên nam châm để gắn, kéo xuống để thả rơi)',
-  ATTACH_CYLINDER: 'Chạm Nam châm điện để hút giữ Trụ thép',
-  RELEASE_CYLINDER: 'Bấm Công tắc kép để ngắt điện nam châm & thả Trụ thép',
-  TOGGLE_POWER: 'Bật / Tắt nguồn đồng hồ đo thời gian hiện số',
-  RESET_TIMER: 'Nhấn nút RESET đưa đồng hồ về 0.000 s',
-  CYCLE_MODE: 'Chuyển chế độ đo MODE trên đồng hồ',
-};
 
 /**
  * Tạo texture vân gỗ tự nhiên sắc nét cho mặt bàn thí nghiệm
@@ -282,7 +270,11 @@ function getPortColorHex(state: PortSignalState): string {
 }
 
 /**
- * Vẽ màn hình mặt trước của Đồng hồ đo thời gian hiện số MC964 (cổng A ở trên, cổng B ở dưới)
+ * Vẽ màn hình mặt trước của Đồng hồ đo thời gian hiện số MC964:
+ * - Cột ổ cắm vật lí 3D nằm sát mép trái (cx = 40) để dây dẫn từ giá đỡ bên trái đi thẳng vào ổ cắm,
+ *   tuyệt đối không vắt ngang qua màn hình LED hay che chữ thông số.
+ * - Cột thẻ trạng thái CỔNG A (TRÊN) và CỔNG B (DƯỚI) nằm kế bên (cx = 74..228), hoàn toàn thông thoáng.
+ * - Màn hình LED 7 đoạn cỡ lớn và dải MODE nằm bên phải (cx = 238..622).
  */
 function updateTimerScreenCanvas(
   canvas: HTMLCanvasElement,
@@ -304,20 +296,139 @@ function updateTimerScreenCanvas(
 
   // Tiêu đề đồng hồ MC964
   ctx.fillStyle = '#f8fafc';
-  ctx.font = 'bold 21px "Plus Jakarta Sans", sans-serif';
+  ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('ĐỒNG HỒ HIỆN SỐ MC964', 24, 38);
+  ctx.fillText('ĐỒNG HỒ HIỆN SỐ MC964', 22, 36);
 
   ctx.fillStyle = '#38bdf8';
   ctx.font = 'bold 17px "JetBrains Mono", monospace';
   ctx.textAlign = 'right';
-  ctx.fillText(`MODE: ${snapshot.c3Mode}`, w - 24, 38);
+  ctx.fillText(`MODE: ${snapshot.c3Mode === 'A<->B' ? 'A↔B' : snapshot.c3Mode}`, w - 22, 36);
 
-  // Vùng màn hình LED bên trái (rộng 410px)
-  const ledX = 24;
-  const ledY = 54;
-  const ledW = 412;
-  const ledH = 166;
+  // =========================================================================
+  // 1. DẢI Ổ CẮM VẬT LÍ BÊN TRÁI (cx = 16..66) + THẺ TRẠNG THÁI (cx = 72..226)
+  // =========================================================================
+  const drawSocketAndStatusRow = (
+    portShort: string,
+    portTitle: string,
+    roleText: string,
+    state: PortSignalState,
+    ringColor: string,
+    rowY: number,
+    rowH: number
+  ) => {
+    const stateColor = getPortColorHex(state);
+    const socketCenterX = 40;
+    const socketCenterY = rowY + rowH * 0.54;
+
+    // Khung ổ cắm bên trái (nơi gắn giắc 3D thực tế)
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(16, rowY, 48, rowH);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(16, rowY, 48, rowH);
+
+    // Chữ ký hiệu nhỏ phía trên ổ cắm 3D (không bị giắc che)
+    ctx.fillStyle = ringColor;
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(portShort, socketCenterX, rowY + 14);
+
+    // Vòng bezel ổ cắm trên mặt máy
+    ctx.strokeStyle = ringColor;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(socketCenterX, socketCenterY + 4, 13, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Thẻ thông số trạng thái cổng nằm tách biệt bên phải ổ cắm (cx = 68..226) -> Không bao giờ bị dây che
+    const cardX = 68;
+    const cardW = 158;
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(cardX, rowY, cardW, rowH);
+    ctx.strokeStyle = stateColor;
+    ctx.lineWidth = state === 'ACTIVE' || state === 'RECEIVED' ? 2.8 : 1.5;
+    ctx.strokeRect(cardX, rowY, cardW, rowH);
+
+    // Đèn LED báo trạng thái cổng
+    ctx.fillStyle = stateColor;
+    ctx.beginPath();
+    ctx.arc(cardX + 14, rowY + 19, 6, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = 'bold 14px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(portTitle, cardX + 26, rowY + 24);
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '500 11px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText(roleText, cardX + 10, rowY + 43);
+
+    ctx.fillStyle = stateColor;
+    ctx.font = 'bold 12px "JetBrains Mono", monospace';
+    ctx.fillText(PORT_STATE_LABELS[state], cardX + 10, rowY + 62);
+  };
+
+  // Hàng 1 (Trên): CỔNG A
+  drawSocketAndStatusRow(
+    'IN A',
+    'CỔNG A (TRÊN)',
+    'Cổng quang điện A',
+    snapshot.portAState,
+    '#ef4444',
+    50,
+    72
+  );
+
+  // Hàng 2 (Giữa): CỔNG B
+  drawSocketAndStatusRow(
+    'IN B',
+    'CỔNG B (DƯỚI)',
+    'Cổng quang điện B',
+    snapshot.portBState,
+    '#0284c7',
+    132,
+    72
+  );
+
+  // Hàng 3 (Dưới cùng bên trái): CỔNG CÔNG TẮC / NAM CHÂM ĐIỆN
+  const swActive = !snapshot.releaseSwitchClosed;
+  const swColor = snapshot.powerOn ? (swActive ? '#f59e0b' : '#10b981') : '#64748b';
+  ctx.fillStyle = '#090d16';
+  ctx.fillRect(16, 214, 48, 62);
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(16, 214, 48, 62);
+  ctx.fillStyle = '#f59e0b';
+  ctx.font = 'bold 10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('SW/EM', 40, 228);
+
+  ctx.fillStyle = '#090d16';
+  ctx.fillRect(68, 214, 158, 62);
+  ctx.strokeStyle = swColor;
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(68, 214, 158, 62);
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 13px "JetBrains Mono", monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('CÔNG TẮC KÉP', 78, 234);
+  ctx.fillStyle = swColor;
+  ctx.font = 'bold 12px "JetBrains Mono", monospace';
+  ctx.fillText(
+    !snapshot.powerOn ? 'NGUỒN TẮT' : swActive ? 'ĐÃ NHẢ VẬT (t=0)' : 'GIỮ NAM CHÂM',
+    78,
+    258
+  );
+
+  // =========================================================================
+  // 2. VÙNG MÀN HÌNH LED 7 ĐOẠN CỠ LỚN BÊN PHẢI (cx = 238..620)
+  // =========================================================================
+  const ledX = 238;
+  const ledY = 50;
+  const ledW = 382;
+  const ledH = 172;
 
   ctx.fillStyle = '#050811';
   ctx.fillRect(ledX, ledY, ledW, ledH);
@@ -325,140 +436,104 @@ function updateTimerScreenCanvas(
   ctx.lineWidth = 4;
   ctx.strokeRect(ledX, ledY, ledW, ledH);
 
-  // Vùng 2 đầu nối tín hiệu xếp dọc bên phải: CỔNG A (Trên) & CỔNG B (Dưới)
-  const portBoxX = 450;
-  const portBoxW = w - portBoxX - 20;
-
-  const drawPortBox = (
-    portName: string,
-    roleText: string,
-    state: PortSignalState,
-    boxY: number
-  ) => {
-    const color = getPortColorHex(state);
-    ctx.fillStyle = '#090d16';
-    ctx.fillRect(portBoxX, boxY, portBoxW, 78);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = state === 'ACTIVE' || state === 'RECEIVED' ? 3 : 1.5;
-    ctx.strokeRect(portBoxX, boxY, portBoxW, 78);
-
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(portBoxX + 18, boxY + 22, 7, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = 'bold 16px "JetBrains Mono", monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(portName, portBoxX + 32, boxY + 27);
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '500 12px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(roleText, portBoxX + 12, boxY + 48);
-
-    ctx.fillStyle = color;
-    ctx.font = 'bold 13px "JetBrains Mono", monospace';
-    ctx.fillText(PORT_STATE_LABELS[state], portBoxX + 12, boxY + 68);
-  };
-
-  drawPortBox(
-    'CỔNG A (TRÊN)',
-    'Cổng quang điện A',
-    snapshot.portAState,
-    54
-  );
-
-  drawPortBox('CỔNG B (DƯỚI)', 'Cổng quang điện B', snapshot.portBState, 142);
-
-  if (!snapshot.powerOn) {
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 76px "JetBrains Mono", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('8.8.8.8', ledX + ledW * 0.5, ledY + 104);
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '600 18px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('NGUỒN TẮT (POWER OFF)', w / 2, h - 28);
-    return;
-  }
-
-  const isError = snapshot.phase === 'ERROR';
-  const displayStr = isError
-    ? 'Err'
-    : `${formatTimerDisplay(snapshot.timerDisplaySeconds, physicsConfig.timerScale)}s`;
-
-  ctx.fillStyle = isError ? '#f97316' : '#ef4444';
-  ctx.font = 'bold 68px "JetBrains Mono", monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText(displayStr, ledX + ledW - 18, ledY + 94);
-
-  // Dòng phụ bên dưới số LED tùy theo MODE
-  ctx.font = 'bold 15px "JetBrains Mono", monospace';
-  ctx.textAlign = 'left';
-  if (snapshot.c3Mode === 'A+B') {
-    const tAStr =
-      snapshot.measuredTimeASeconds !== null
-        ? snapshot.measuredTimeASeconds.toFixed(3)
-        : '0.000';
-    const tBStr =
-      snapshot.measuredTimeBSeconds !== null
-        ? snapshot.measuredTimeBSeconds.toFixed(3)
-        : '0.000';
-    ctx.fillStyle = '#fbbf24';
-    ctx.fillText(`tA=${tAStr}s | tB=${tBStr}s (Tổng t=tA+tB)`, ledX + 16, ledY + 146);
-  } else if (snapshot.c3Mode === 'A<->B') {
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText('Hành trình: Cổng A  ━━━►  Cổng B', ledX + 16, ledY + 146);
-  } else if (snapshot.c3Mode === 'T') {
-    ctx.fillStyle = '#a78bfa';
-    ctx.fillText(
-      `Đo chu kì T | Sự kiện nhận: ${snapshot.periodEventCount}/2`,
-      ledX + 16,
-      ledY + 146
-    );
-  } else if (snapshot.c3Mode === 'A') {
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText('Đo thời gian vật chắn chùm tia Cổng A', ledX + 16, ledY + 146);
-  } else if (snapshot.c3Mode === 'B') {
-    ctx.fillStyle = '#38bdf8';
-    ctx.fillText('Đo thời gian vật chắn chùm tia Cổng B', ledX + 16, ledY + 146);
-  }
-
-  // Hàng đèn báo trạng thái đồng hồ
+  // Hàng đèn báo trạng thái đồng hồ (READY / RUN / STOP)
   const drawIndicator = (label: string, active: boolean, color: string, xPos: number) => {
     ctx.fillStyle = active ? color : '#1e293b';
     ctx.beginPath();
-    ctx.arc(xPos, ledY + 26, 7, 0, Math.PI * 2);
+    ctx.arc(xPos, ledY + 24, 6.5, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = active ? '#f8fafc' : '#475569';
-    ctx.font = 'bold 14px "JetBrains Mono", monospace';
+    ctx.font = 'bold 13px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(label, xPos + 12, ledY + 31);
+    ctx.fillText(label, xPos + 11, ledY + 29);
   };
 
-  drawIndicator('READY', snapshot.timerResetReady, '#10b981', ledX + 20);
-  drawIndicator('RUN', snapshot.phase === 'FALLING_TIMER_RUNNING', '#38bdf8', ledX + 110);
+  drawIndicator('READY', snapshot.timerResetReady, '#10b981', ledX + 18);
+  drawIndicator('RUN', snapshot.phase === 'FALLING_TIMER_RUNNING', '#38bdf8', ledX + 104);
   drawIndicator(
     'STOP',
     snapshot.phase === 'PHOTOGATE_TRIGGERED' || snapshot.phase === 'MEASUREMENT_COMPLETE',
     '#f59e0b',
-    ledX + 190
+    ledX + 178
   );
 
-  // Dải 5 chế độ MODE ở chân màn hình đồng hồ
+  if (!snapshot.powerOn) {
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 72px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('8.8.8.8', ledX + ledW * 0.5, ledY + 108);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 15px "Plus Jakarta Sans", sans-serif';
+    ctx.fillText('NGUỒN TẮT (POWER OFF)', ledX + ledW * 0.5, ledY + 152);
+  } else {
+    const isError = snapshot.phase === 'ERROR';
+    const displayStr = isError
+      ? 'Err'
+      : `${formatTimerDisplay(snapshot.timerDisplaySeconds, physicsConfig.timerScale)}s`;
+
+    ctx.fillStyle = isError ? '#f97316' : '#ef4444';
+    ctx.font = 'bold 66px "JetBrains Mono", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(displayStr, ledX + ledW - 18, ledY + 104);
+
+    // Dòng phụ bên dưới số LED tùy theo MODE
+    ctx.font = 'bold 14px "JetBrains Mono", monospace';
+    ctx.textAlign = 'left';
+    if (snapshot.c3Mode === 'A+B') {
+      const tAStr =
+        snapshot.measuredTimeASeconds !== null
+          ? snapshot.measuredTimeASeconds.toFixed(3)
+          : '0.000';
+      const tBStr =
+        snapshot.measuredTimeBSeconds !== null
+          ? snapshot.measuredTimeBSeconds.toFixed(3)
+          : '0.000';
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`tA=${tAStr}s | tB=${tBStr}s (t=tA+tB)`, ledX + 14, ledY + 152);
+    } else if (snapshot.c3Mode === 'A<->B') {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('Hành trình: Cổng A  ━━━►  Cổng B', ledX + 14, ledY + 152);
+    } else if (snapshot.c3Mode === 'T') {
+      ctx.fillStyle = '#a78bfa';
+      ctx.fillText(
+        `Đo chu kì T | Sự kiện nhận: ${snapshot.periodEventCount}/2`,
+        ledX + 14,
+        ledY + 152
+      );
+    } else if (snapshot.c3Mode === 'A') {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('Đo thời gian chắn chùm tia Cổng A', ledX + 14, ledY + 152);
+    } else if (snapshot.c3Mode === 'B') {
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText('Đo thời gian chắn chùm tia Cổng B', ledX + 14, ledY + 152);
+    }
+  }
+
+  // =========================================================================
+  // 3. DẢI 5 CHẾ ĐỘ MODE (cx = 238..620, cy = 232..266) & NHÃN NÚT BẤM VẬT LÍ
+  // =========================================================================
   const modes: ('A' | 'B' | 'A+B' | 'A<->B' | 'T')[] = ['A', 'B', 'A+B', 'A<->B', 'T'];
   modes.forEach((m, idx) => {
-    const bx = 24 + idx * 82;
-    const by = h - 54;
+    const bx = 238 + idx * 77;
+    const by = 232;
     const isSel = snapshot.c3Mode === m;
     ctx.fillStyle = isSel ? '#0284c7' : '#1e293b';
-    ctx.fillRect(bx, by, 74, 32);
+    ctx.fillRect(bx, by, 70, 30);
     ctx.fillStyle = isSel ? '#ffffff' : '#94a3b8';
-    ctx.font = 'bold 16px "JetBrains Mono", monospace';
+    ctx.font = 'bold 15px "JetBrains Mono", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(m === 'A<->B' ? 'A↔B' : m, bx + 37, by + 22);
+    ctx.fillText(m === 'A<->B' ? 'A↔B' : m, bx + 35, by + 20);
   });
+
+  // Nhãn cho 3 nút cơ học 3D nằm ở góc dưới phải (nút 3D đặt ở cy = 304 nên nhãn ở cy = 282 không bị che)
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = 'bold 11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('POWER', 310, 284);
+  ctx.fillText('RESET', 435, 284);
+  ctx.fillText('MODE', 555, 284);
 }
 
 export const Apparatus3D: React.FC<Apparatus3DProps> = ({
@@ -588,6 +663,8 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     timerScreenTexture: THREE.CanvasTexture;
     photogateCableMesh: THREE.Mesh;
     photogateCableMat: THREE.MeshStandardMaterial;
+    plugAGroup: THREE.Group;
+    plugBGroup: THREE.Group;
     pulseSpheres: THREE.Mesh[];
     pulseSpheresB: THREE.Mesh[];
     dimensionLineMesh: THREE.Mesh;
@@ -1525,51 +1602,153 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     timerGroup.add(timerFrontPlate);
 
     const powerSwitchMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.026, 0.018, 0.014),
+      new THREE.BoxGeometry(0.024, 0.015, 0.014),
       new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.3 })
     );
-    powerSwitchMesh.position.set(-0.095, 0.028, 0.096);
+    powerSwitchMesh.position.set(-0.004, 0.019, 0.096);
     registerInteractive(powerSwitchMesh, 'DIGITAL_TIMER', 'TOGGLE_POWER', 'BTN_POWER');
     timerGroup.add(powerSwitchMesh);
 
     const resetBtnMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.012, 0.012, 0.014, 20),
+      new THREE.CylinderGeometry(0.0105, 0.0105, 0.014, 20),
       new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.25, metalness: 0.2 })
     );
     resetBtnMesh.rotation.x = Math.PI / 2;
-    resetBtnMesh.position.set(-0.035, 0.028, 0.096);
+    resetBtnMesh.position.set(0.047, 0.019, 0.096);
     registerInteractive(resetBtnMesh, 'DIGITAL_TIMER', 'RESET_TIMER', 'BTN_RESET');
     timerGroup.add(resetBtnMesh);
 
     const modeBtnMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.011, 0.011, 0.014, 20),
+      new THREE.CylinderGeometry(0.0105, 0.0105, 0.014, 20),
       new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.3, metalness: 0.3 })
     );
     modeBtnMesh.rotation.x = Math.PI / 2;
-    modeBtnMesh.position.set(0.015, 0.028, 0.096);
+    modeBtnMesh.position.set(0.097, 0.019, 0.096);
     registerInteractive(modeBtnMesh, 'DIGITAL_TIMER', 'CYCLE_MODE', 'BTN_MODE');
     timerGroup.add(modeBtnMesh);
 
-    // Bố trí 2 cổng tín hiệu trên mặt đồng hồ MC964: CỔNG A ở phía trên, CỔNG B ở phía dưới
-    const jackA = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0085, 0.0085, 0.016, 16),
-      matRedTerminal
-    );
-    jackA.rotation.x = Math.PI / 2;
-    jackA.position.set(0.106, 0.102, 0.096);
+    // =========================================================================
+    // Ổ CẮM TÍN HIỆU 3D TRÊN DẢI MÉP TRÁI MẶT ĐỒNG HỒ MC964 (local x = -0.1155, world x = 0.2245)
+    // Đặt ở mép trái (gần cột giá đỡ x = 0) giúp dây từ Cổng A, Cổng B và Công tắc
+    // đi thẳng từ bên trái vào ổ cắm mà KHÔNG BAO GIỜ vắt ngang qua màn hình hay che thông số.
+    // =========================================================================
+    const buildPanelSocket3D = (localY: number, coreMat: THREE.Material) => {
+      const sockGroup = new THREE.Group();
+      sockGroup.position.set(-0.1155, localY, 0.091);
+
+      // Vòng đai ốc lục giác / ren kim loại mạ crôm
+      const bezelMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0085, 0.0095, 0.007, 18),
+        matStainlessRod
+      );
+      bezelMesh.rotation.x = Math.PI / 2;
+      bezelMesh.position.z = 0.0035;
+      sockGroup.add(bezelMesh);
+
+      // Lõi cách điện màu theo kênh (Đỏ cho A, Xanh cho B, Đen/Cam cho Công tắc)
+      const coreMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0062, 0.0062, 0.009, 16),
+        coreMat
+      );
+      coreMesh.rotation.x = Math.PI / 2;
+      coreMesh.position.z = 0.0045;
+      sockGroup.add(coreMesh);
+
+      // Lỗ kim loại chính giữa ổ cắm
+      const pinHoleMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0028, 0.0028, 0.01, 12),
+        matDarkAbs
+      );
+      pinHoleMesh.rotation.x = Math.PI / 2;
+      pinHoleMesh.position.z = 0.005;
+      sockGroup.add(pinHoleMesh);
+
+      return sockGroup;
+    };
+
+    // Ổ cắm CỔNG A (Ở phía trên: local y = 0.104, world y = 0.104)
+    const jackA = buildPanelSocket3D(0.104, matRedTerminal);
     timerGroup.add(jackA);
 
-    const jackB = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0085, 0.0085, 0.016, 16),
-      matBlueTerminal
-    );
-    jackB.rotation.x = Math.PI / 2;
-    jackB.position.set(0.106, 0.048, 0.096);
+    // Ổ cắm CỔNG B (Ở phía dưới: local y = 0.071, world y = 0.071)
+    const jackB = buildPanelSocket3D(0.071, matBlueTerminal);
     timerGroup.add(jackB);
+
+    // Ổ cắm phụ CÔNG TẮC / NAM CHÂM (Ở dưới cùng: local y = 0.038, world y = 0.038)
+    const jackSwitch = buildPanelSocket3D(0.038, matBlackTerminal);
+    timerGroup.add(jackSwitch);
 
     registerInteractive(timerBody, 'DIGITAL_TIMER', undefined, 'TIMER_BODY');
     registerInteractive(timerFrontPlate, 'DIGITAL_TIMER', undefined, 'TIMER_BODY');
     scene.add(timerGroup);
+
+    // Tạo phích cắm 3D có chuôi cao su chống gãy cáp (Strain-Relief Aviation Plug)
+    const buildAviationPlug3D = (bodyMat: THREE.Material) => {
+      const plugGroup = new THREE.Group();
+
+      // Đầu kim loại cắm vào ổ
+      const metalTip = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0048, 0.0048, 0.01, 14),
+        matStainlessRod
+      );
+      metalTip.rotation.x = Math.PI / 2;
+      metalTip.position.z = -0.004;
+      plugGroup.add(metalTip);
+
+      // Thân phích cắm bọc nhựa màu
+      const gripBody = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0072, 0.0068, 0.015, 16),
+        bodyMat
+      );
+      gripBody.rotation.x = Math.PI / 2;
+      gripBody.position.z = 0.006;
+      gripBody.castShadow = true;
+      plugGroup.add(gripBody);
+
+      // Vòng khía kim loại
+      const knurlRing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0076, 0.0076, 0.004, 16),
+        matStainlessRod
+      );
+      knurlRing.rotation.x = Math.PI / 2;
+      knurlRing.position.z = 0.001;
+      plugGroup.add(knurlRing);
+
+      // Chuôi cao su thuôn chống gãy đầu dây (Strain-relief boot) hướng về +Z (z = 0.013 -> 0.026)
+      const rubberBoot = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0038, 0.0062, 0.013, 14),
+        matRubber
+      );
+      rubberBoot.rotation.x = Math.PI / 2;
+      rubberBoot.position.z = 0.0195;
+      plugGroup.add(rubberBoot);
+
+      return plugGroup;
+    };
+
+    const plugAGroup = buildAviationPlug3D(matRedTerminal);
+    const plugBGroup = buildAviationPlug3D(matBlueTerminal);
+    const plugSwitchGroup = buildAviationPlug3D(matBlackTerminal);
+    // Phích cắm công tắc luôn cắm ở ổ dưới cùng (world x = 0.2245, y = 0.038, z = 0.178)
+    plugSwitchGroup.position.set(0.2245, 0.038, 0.178);
+    scene.add(plugAGroup);
+    scene.add(plugBGroup);
+    scene.add(plugSwitchGroup);
+
+    // Kẹp giữ dây cố định trên mặt bàn gỗ (Bench Cable Clips) để các dây đi gọn gàng thực tế
+    const createCableClip = (x: number, z: number, rotY = 0) => {
+      const clip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.016, 0.007, 0.014),
+        matDarkAbs
+      );
+      clip.position.set(x, 0.0035, z);
+      clip.rotation.y = rotY;
+      clip.receiveShadow = true;
+      scene.add(clip);
+    };
+    createCableClip(-0.14, 0.215, 0.2);
+    createCableClip(0.04, 0.232, 0);
+    createCableClip(0.135, 0.185, -0.35);
 
     // =========================================================================
     // BỘ PHẬN (7): CÔNG TẮC KÉP ĐIỀU KHIỂN NHẢ TRỤ THÉP
@@ -1609,90 +1788,133 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     scene.add(switchGroup);
 
     // =========================================================================
-    // DÂY NỐI ĐIỆN 3D (CỔNG QUANG A VÀO CỔNG A TRÊN, CỔNG QUANG B VÀO CỔNG B DƯỚI)
+    // HỆ THỐNG DÂY DẪN 3D THỰC TẾ – PHÂN TẦNG KHÔNG GIAN, KHÔNG CHE MÀN HÌNH ĐỒNG HỒ
+    // - Mọi dây đều đi ở vùng bên trái đồng hồ (x <= 0.2245) và phía trước ổ cắm (z >= 0.204)
+    // - Tuyệt đối không đâm xuyên qua thân đồng hồ và không vắt ngang qua mặt hiển thị LED
     // =========================================================================
+
+    // 1. Dây nguồn từ Công tắc kép (cọc trái) đi vòng phía sau giá đỡ lên Nam châm điện đỉnh trụ
     const magnetCableCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.23, 0.034, 0.135),
-      new THREE.Vector3(-0.18, 0.02, 0.02),
-      new THREE.Vector3(-0.08, 0.35, -0.02),
-      new THREE.Vector3(-0.04, 0.85, 0.01),
+      new THREE.Vector3(-0.292, 0.035, 0.136),
+      new THREE.Vector3(-0.24, 0.010, 0.035),
+      new THREE.Vector3(-0.11, 0.012, -0.035),
+      new THREE.Vector3(-0.032, 0.36, -0.025),
+      new THREE.Vector3(-0.024, 0.88, -0.012),
       new THREE.Vector3(-0.01, 1.01, DROP_LINE_Z),
     ]);
     const magnetCableMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(magnetCableCurve, 36, 0.0032, 8, false),
-      new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 })
+      new THREE.TubeGeometry(magnetCableCurve, 40, 0.0032, 10, false),
+      new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.42 })
     );
+    magnetCableMesh.castShadow = true;
     scene.add(magnetCableMesh);
 
+    // 2. Dây tín hiệu kích hoạt từ Công tắc kép (cọc phải) đi sát mặt bàn phía trước vào ổ SW/EM dưới cùng
     const switchToTimerCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(-0.22, 0.034, 0.135),
-      new THREE.Vector3(-0.06, 0.016, 0.21),
-      new THREE.Vector3(0.24, 0.04, 0.21),
-      new THREE.Vector3(0.34 + 0.106, 0.102, 0.176),
+      new THREE.Vector3(-0.228, 0.035, 0.136),
+      new THREE.Vector3(-0.14, 0.009, 0.215),
+      new THREE.Vector3(0.04, 0.009, 0.232),
+      new THREE.Vector3(0.175, 0.014, 0.228),
+      new THREE.Vector3(0.218, 0.036, 0.216),
+      new THREE.Vector3(0.2245, 0.038, 0.204),
     ]);
     const switchToTimerMesh = new THREE.Mesh(
-      new THREE.TubeGeometry(switchToTimerCurve, 32, 0.0028, 8, false),
-      new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.45 })
+      new THREE.TubeGeometry(switchToTimerCurve, 36, 0.003, 10, false),
+      new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.42 })
     );
+    switchToTimerMesh.castShadow = true;
     scene.add(switchToTimerMesh);
 
-    // Dây tín hiệu từ Cổng quang điện A (trên giá đỡ) nối vào CỔNG A (phía trên) của đồng hồ MC964
-    let activePhotogateACurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.036, initGateAY, 0.042),
-      new THREE.Vector3(0.13, Math.max(0.14, initGateAY * 0.78), 0.05),
-      new THREE.Vector3(0.24, 0.09, 0.16),
-      new THREE.Vector3(0.34 + 0.106, 0.102, 0.176),
-    ]);
+    // Hàm cập nhật vị trí phích cắm 3D của Cổng A và Cổng B (cắm vào ổ hoặc rút ra đặt trên bàn)
+    const updatePlugATransform = (connected: boolean) => {
+      if (connected) {
+        plugAGroup.position.set(0.2245, 0.104, 0.178);
+        plugAGroup.rotation.set(0, 0, 0);
+      } else {
+        plugAGroup.position.set(0.168, 0.009, 0.236);
+        plugAGroup.rotation.set(0, -0.45, 0);
+      }
+    };
+    const updatePlugBTransform = (connected: boolean) => {
+      if (connected) {
+        plugBGroup.position.set(0.2245, 0.071, 0.178);
+        plugBGroup.rotation.set(0, 0, 0);
+      } else {
+        plugBGroup.position.set(0.142, 0.009, 0.252);
+        plugBGroup.rotation.set(0, -0.55, 0);
+      }
+    };
+    updatePlugATransform(latestPropsRef.current.snapshot.portAConnected);
+    updatePlugBTransform(latestPropsRef.current.snapshot.photogateConnected);
+
+    // 3. Dây tín hiệu ĐỎ từ Cổng quang điện A (trên giá đỡ) nối vào CỔNG A (phía trên, mép trái đồng hồ)
+    // Đi theo cung lơ lửng tầng trên (y >= 0.104), uốn từ bên trái vào thẳng đuôi phích cắm A (x = 0.2245, z = 0.204)
+    let activePhotogateACurve = new THREE.CatmullRomCurve3([]);
     const photogateACableMat = new THREE.MeshStandardMaterial({
       color: 0xef4444,
-      roughness: 0.42,
+      roughness: 0.36,
+      metalness: 0.05,
     });
     const buildPhotogateACableGeo = (gateAY: number, connected: boolean) => {
-      const endPoint = connected
-        ? new THREE.Vector3(0.34 + 0.106, 0.102, 0.176) // Cắm vào CỔNG A (phía trên)
-        : new THREE.Vector3(0.25, 0.02, 0.22);
-      activePhotogateACurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0.036, gateAY, 0.042),
-        new THREE.Vector3(0.13, Math.max(0.14, gateAY * 0.78), 0.05),
-        new THREE.Vector3(0.24, 0.09, 0.16),
-        endPoint,
-      ]);
-      return new THREE.TubeGeometry(activePhotogateACurve, 28, 0.003, 8, false);
+      const startPt = new THREE.Vector3(0.036, gateAY, 0.038);
+      if (connected) {
+        activePhotogateACurve = new THREE.CatmullRomCurve3([
+          startPt,
+          new THREE.Vector3(0.088, Math.max(0.155, gateAY - 0.035), 0.068),
+          new THREE.Vector3(0.148, Math.max(0.122, gateAY * 0.46), 0.142),
+          new THREE.Vector3(0.206, 0.106, 0.214),
+          new THREE.Vector3(0.2245, 0.104, 0.204), // Đúng đầu chuôi cao su phích cắm CỔNG A (Trên)
+        ]);
+      } else {
+        activePhotogateACurve = new THREE.CatmullRomCurve3([
+          startPt,
+          new THREE.Vector3(0.085, Math.max(0.12, gateAY * 0.65), 0.085),
+          new THREE.Vector3(0.132, 0.025, 0.175),
+          new THREE.Vector3(0.168, 0.009, 0.236), // Nối tới phích cắm A đang rút để trên mặt bàn
+        ]);
+      }
+      return new THREE.TubeGeometry(activePhotogateACurve, 36, 0.0034, 10, false);
     };
     const photogateACableMesh = new THREE.Mesh(
       buildPhotogateACableGeo(initGateAY, latestPropsRef.current.snapshot.portAConnected),
       photogateACableMat
     );
+    photogateACableMesh.castShadow = true;
     scene.add(photogateACableMesh);
 
-    // Dây tín hiệu từ Cổng quang điện B (trên giá đỡ) nối vào CỔNG B (phía dưới) của đồng hồ MC964
-    let activePhotogateCurve = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(0.036, initGateY, 0.042),
-      new THREE.Vector3(0.11, Math.max(0.08, initGateY * 0.75), 0.03),
-      new THREE.Vector3(0.21, 0.02, 0.15),
-      new THREE.Vector3(0.34 + 0.106, 0.048, 0.176),
-    ]);
-
+    // 4. Dây tín hiệu XANH DƯƠNG từ Cổng quang điện B (trên giá đỡ) nối vào CỔNG B (phía dưới, mép trái đồng hồ)
+    // Đi qua kẹp giữ dây trên mặt bàn (x = 0.135, z = 0.185) rồi vòng lên thẳng đuôi phích cắm B (y = 0.071)
+    let activePhotogateCurve = new THREE.CatmullRomCurve3([]);
     const photogateCableMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
-      roughness: 0.45,
+      roughness: 0.36,
+      metalness: 0.05,
     });
     const buildPhotogateCableGeo = (gateY: number, connected: boolean) => {
-      const endPoint = connected
-        ? new THREE.Vector3(0.34 + 0.106, 0.048, 0.176) // Cắm vào CỔNG B (phía dưới)
-        : new THREE.Vector3(0.26, 0.01, 0.24);
-      activePhotogateCurve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(0.036, gateY, 0.042),
-        new THREE.Vector3(0.11, Math.max(0.08, gateY * 0.75), 0.03),
-        new THREE.Vector3(0.21, 0.02, 0.15),
-        endPoint,
-      ]);
-      return new THREE.TubeGeometry(activePhotogateCurve, 28, 0.003, 8, false);
+      const startPt = new THREE.Vector3(0.036, gateY, 0.038);
+      if (connected) {
+        activePhotogateCurve = new THREE.CatmullRomCurve3([
+          startPt,
+          new THREE.Vector3(0.078, Math.max(0.075, gateY - 0.045), 0.105),
+          new THREE.Vector3(0.135, 0.011, 0.185), // Đi qua kẹp cố định dây trên mặt bàn gỗ
+          new THREE.Vector3(0.202, 0.066, 0.216),
+          new THREE.Vector3(0.2245, 0.071, 0.204), // Đúng đầu chuôi cao su phích cắm CỔNG B (Dưới)
+        ]);
+      } else {
+        activePhotogateCurve = new THREE.CatmullRomCurve3([
+          startPt,
+          new THREE.Vector3(0.078, Math.max(0.06, gateY * 0.6), 0.11),
+          new THREE.Vector3(0.118, 0.011, 0.195),
+          new THREE.Vector3(0.142, 0.009, 0.252), // Nối tới phích cắm B đang rút để trên mặt bàn
+        ]);
+      }
+      return new THREE.TubeGeometry(activePhotogateCurve, 36, 0.0034, 10, false);
     };
     const photogateCableMesh = new THREE.Mesh(
       buildPhotogateCableGeo(initGateY, latestPropsRef.current.snapshot.photogateConnected),
       photogateCableMat
     );
+    photogateCableMesh.castShadow = true;
     scene.add(photogateCableMesh);
 
     const pulseSpheres: THREE.Mesh[] = [];
@@ -1746,6 +1968,8 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       timerScreenTexture,
       photogateCableMesh,
       photogateCableMat,
+      plugAGroup,
+      plugBGroup,
       pulseSpheres,
       pulseSpheresB,
       dimensionLineMesh,
@@ -1854,7 +2078,6 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
           dragGrabOffsetY = planeY !== null ? planeY - currentGateAY : 0;
           controls.enabled = false;
           applyGroupHighlight('PHOTOGATE_A', true);
-          setHoverHintText(HOVER_ACTION_HINTS.DRAG_PHOTOGATE_A);
           canvasEl.setPointerCapture(e.pointerId);
           e.stopPropagation();
           return;
@@ -1873,7 +2096,6 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
           dragGrabOffsetY = planeY !== null ? planeY - currentGateY : 0;
           controls.enabled = false;
           applyGroupHighlight('PHOTOGATE', true);
-          setHoverHintText(HOVER_ACTION_HINTS.DRAG_PHOTOGATE);
           canvasEl.setPointerCapture(e.pointerId);
           e.stopPropagation();
           return;
@@ -1897,7 +2119,6 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
             }
             controls.enabled = false;
             applyGroupHighlight('CYLINDER', true);
-            setHoverHintText(HOVER_ACTION_HINTS.DRAG_CYLINDER);
             canvasEl.setPointerCapture(e.pointerId);
             e.stopPropagation();
             return;
@@ -1950,17 +2171,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
             Math.min(DROP_ORIGIN_Y, planeY - dragGrabOffsetY)
           );
           sceneObjectsRef.current.manualCylinderDragY = targetCylY;
-          const nearMagnet = targetCylY >= DROP_ORIGIN_Y - 0.08;
-          setHoverHintText(
-            nearMagnet
-              ? 'Thả chuột/ngón tay để Nam châm điện hút giữ Trụ thép (s = 0,0 cm)'
-              : 'Thả chuột/ngón tay để buông Trụ thép rơi tự do!'
-          );
         }
         return;
       }
 
-      // Khi không kéo: Kiểm tra Hover với throttle 30ms để hiển thị phản hồi thị giác (Highlight + Hint)
+      // Khi không kéo: Kiểm tra Hover với throttle 30ms để hiển thị phản hồi thị giác (Highlight)
       const now = performance.now();
       if (now - lastHoverRaycastMs < 30) return;
       lastHoverRaycastMs = now;
@@ -1970,17 +2185,10 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
         const hitObj = hits[0].object;
         const actionType = hitObj.userData.actionType as string | undefined;
         const highlightKey = hitObj.userData.highlightKey as string | undefined;
-        const eqId = hitObj.userData.equipmentId as EquipmentId | undefined;
 
         if (highlightKey !== currentHoveredKey) {
           currentHoveredKey = highlightKey || null;
           applyGroupHighlight(currentHoveredKey, false);
-        }
-
-        if (actionType && HOVER_ACTION_HINTS[actionType]) {
-          setHoverHintText(HOVER_ACTION_HINTS[actionType]);
-        } else if (eqId && EQUIPMENT_CATALOG[eqId]) {
-          setHoverHintText(`Chạm để xem chi tiết: ${EQUIPMENT_CATALOG[eqId].shortLabel}`);
         }
 
         canvasEl.style.cursor =
@@ -1994,7 +2202,6 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
           currentHoveredKey = null;
           applyGroupHighlight(null, false);
         }
-        setHoverHintText(null);
         canvasEl.style.cursor = 'grab';
       }
     };
@@ -2286,9 +2493,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
 
         objs.photogateAAssembly.visible = showGateA;
         objs.photogateACableMesh.visible = showGateA;
+        objs.plugAGroup.visible = showGateA;
 
         objs.photogateAssembly.visible = showGateB;
         objs.photogateCableMesh.visible = showGateB;
+        objs.plugBGroup.visible = showGateB;
 
         // 2A. Cập nhật vị trí & trạng thái Cổng quang điện A (s_A)
         const gateAY = DROP_ORIGIN_Y - snap.gateADistanceMeters;
@@ -2304,6 +2513,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
         ) {
           lastGateACableY = currentGateAY;
           lastGateAConnected = snap.portAConnected;
+          updatePlugATransform(snap.portAConnected);
           objs.photogateACableMesh.geometry.dispose();
           objs.photogateACableMesh.geometry = buildPhotogateACableGeo(
             currentGateAY,
@@ -2353,6 +2563,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
         ) {
           lastGateCableY = currentGateY;
           lastGateConnected = snap.photogateConnected;
+          updatePlugBTransform(snap.photogateConnected);
           objs.photogateCableMesh.geometry.dispose();
           objs.photogateCableMesh.geometry = buildPhotogateCableGeo(
             currentGateY,
@@ -2691,7 +2902,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       <button
         type="button"
         onClick={onToggleLabels}
-        title={showEquipmentLabels ? 'Ẩn chú thích trên màn hình' : 'Hiện chú thích trên màn hình'}
+        title={
+          showEquipmentLabels
+            ? 'Ẩn chú thích thiết bị: Tắt các nhãn tên chi tiết và vạch tọa độ trên màn hình 3D để quan sát mô hình thoáng hơn'
+            : 'Hiện chú thích thiết bị: Bật đầy đủ nhãn tên các bộ phận và tọa độ cổng quang sA, s trên màn hình 3D'
+        }
         aria-label={
           showEquipmentLabels ? 'Ẩn chú thích trên màn hình' : 'Hiện chú thích trên màn hình'
         }
@@ -2738,12 +2953,6 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       {/* TOÀN BỘ CÁC CHỮ CHÚ THÍCH TRÊN MÀN HÌNH TỰ ẨN MẶC ĐỊNH, CHỈ HIỆN KHI BẤM NÚT TRÒN CON MẮT */}
       {showEquipmentLabels && (
         <>
-          {hoverHintText && (
-            <div className="pointer-events-none absolute top-3 left-3 z-30 max-w-xs px-3 py-1.5 rounded-lg bg-slate-900/95 border border-sky-400/80 text-sky-200 text-xs font-medium flex items-center gap-2 shadow-xl">
-              <Hand className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="leading-snug">{hoverHintText}</span>
-            </div>
-          )}
 
           <div
             ref={cylinderBadgeRef}

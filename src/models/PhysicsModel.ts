@@ -46,7 +46,7 @@ export interface PhysicsConfig {
 
 export const DEFAULT_PHYSICS_CONFIG: PhysicsConfig = {
   gravity: 9.81,
-  mode: 'IDEAL',
+  mode: 'EXPERIMENTAL',
   noiseSigmaSeconds: 0.0012,
   magneticReleaseDelaySeconds: 0.0006,
   timerScale: '9.999',
@@ -80,6 +80,15 @@ export function sampleStandardNormal(rng: () => number = Math.random): number {
 }
 
 /**
+ * Tạo sai số ngẫu nhiên ở hàng phần nghìn giây từ 1 đến 3 phần nghìn (±0.001 s, ±0.002 s, ±0.003 s)
+ */
+export function sampleThousandthsError(rng: () => number = Math.random): number {
+  const stepMillis = Math.floor(rng() * 3) + 1; // 1, 2 hoặc 3 phần nghìn giây
+  const sign = rng() < 0.5 ? -1 : 1;
+  return sign * stepMillis * 0.001;
+}
+
+/**
  * Tính thời gian rơi lí tưởng chính xác (s) cho quãng đường s (m) và gia tốc g (m/s²)
  */
 export function computeIdealFallTime(distanceMeters: number, gravity: number): number {
@@ -109,7 +118,7 @@ export function formatTimerDisplay(timeSeconds: number, scale: TimerScale): stri
 }
 
 /**
- * Tính thời gian đo được tại cổng quang điện (s), hỗ trợ cả chế độ Lí tưởng và Thực nghiệm có sai số
+ * Tính thời gian đo được tại cổng quang điện (s), hỗ trợ cả chế độ Lí tưởng và Thực nghiệm có sai số ±1..3 phần nghìn giây
  */
 export function computeMeasuredFallTime(
   distanceMeters: number,
@@ -125,12 +134,12 @@ export function computeMeasuredFallTime(
     return { exactIdealTime: 0, rawSimulatedTime: 0, quantizedTime: 0 };
   }
 
+  const idealQuantized = quantizeTimerValue(exactIdealTime, config.timerScale);
   let rawSimulatedTime = exactIdealTime;
   if (config.mode === 'EXPERIMENTAL') {
     const rng = seed !== undefined ? createSeededRandom(seed) : Math.random;
-    const jitter = sampleStandardNormal(rng) * config.noiseSigmaSeconds;
-    const releaseDelay = Math.max(0, config.magneticReleaseDelaySeconds * (0.7 + 0.6 * rng()));
-    rawSimulatedTime = Math.max(0.001, exactIdealTime + releaseDelay + jitter);
+    const errorSeconds = sampleThousandthsError(rng);
+    rawSimulatedTime = Math.max(0.001, idealQuantized + errorSeconds);
   }
 
   const quantizedTime = quantizeTimerValue(rawSimulatedTime, config.timerScale);

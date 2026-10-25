@@ -162,7 +162,7 @@ export function runAllAcceptanceTests(runtimeMetrics?: {
     });
   }
 
-  // TEST G — Dịch cổng: thay đổi vị trí cổng phải cập nhật s và thời gian tương ứng
+  // TEST G — Dịch cổng: thay đổi vị trí cổng phải cập nhật s và thời gian tương ứng (mặc định có sai số ±1..3 ms)
   {
     const ctrl = new ExperimentController();
     ctrl.setPhotogateDistance(0.35);
@@ -172,12 +172,13 @@ export function runAllAcceptanceTests(runtimeMetrics?: {
     for (let i = 0; i < 10; i++) ctrl.stepSimulation(0.05);
     const tMeasured = ctrl.getSnapshot().completedMeasurementSeconds;
     const expectedT = Math.round(Math.sqrt((2 * 0.35) / 9.81) * 1000) / 1000;
-    const passed = sUpdated && tMeasured === expectedT;
+    const diffMillis = tMeasured !== null ? Math.round(Math.abs(tMeasured - expectedT) * 1000) : 999;
+    const passed = sUpdated && tMeasured !== null && diffMillis >= 1 && diffMillis <= 3;
     results.push({
       id: 'TEST G',
-      title: 'Đồng bộ vị trí cổng quang điện, thước đo và thời gian rơi',
+      title: 'Đồng bộ vị trí cổng quang điện, thước đo và sai số thực nghiệm mặc định (±1–3 ms)',
       passed,
-      details: `Dịch cổng tới s = 0,350 m → thời gian đo tự động cập nhật t = ${tMeasured?.toFixed(3)} s (chuẩn ${expectedT.toFixed(3)} s)`,
+      details: `Dịch cổng tới s = 0,350 m → thời gian đo thực nghiệm t = ${tMeasured?.toFixed(3)} s (chuẩn lí thuyết ${expectedT.toFixed(3)} s, lệch ${diffMillis} ms)`,
       category: 'STATE_MACHINE',
     });
   }

@@ -824,7 +824,37 @@ export default function App() {
             <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2 font-mono-tabular shadow-inner">
               <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-800/80 pb-1">
                 <span className="font-bold text-sky-400">MODE: {snapshot.c3Mode}</span>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      labSound.playSwitchClick(880);
+                      updatePhysicsConfig({
+                        mode: physicsConfig.mode === 'EXPERIMENTAL' ? 'IDEAL' : 'EXPERIMENTAL',
+                      });
+                    }}
+                    {...bindTooltip(
+                      'Nút Sai số thực tế (±1–3 phần nghìn giây)',
+                      'Mặc định BẬT sai số ngẫu nhiên từ 1 đến 3 phần nghìn giây (±0,001 s ÷ ±0,003 s) ở chữ số cuối của đồng hồ MC964 để tăng tính thực tế khi đo lặp lại. Nhấn vào nút nhỏ này khi cần TẮT sai số.',
+                      physicsConfig.mode === 'EXPERIMENTAL'
+                        ? 'Đang BẬT (±1–3 ms ngẫu nhiên) — Nhấn để TẮT'
+                        : 'Đang TẮT (Lí tưởng 0 ms) — Nhấn để BẬT lại'
+                    )}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
+                      physicsConfig.mode === 'EXPERIMENTAL'
+                        ? 'bg-amber-950/90 hover:bg-amber-900 text-amber-300 border-amber-500/70'
+                        : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        physicsConfig.mode === 'EXPERIMENTAL' ? 'bg-amber-400' : 'bg-slate-600'
+                      }`}
+                    />
+                    <span>
+                      {physicsConfig.mode === 'EXPERIMENTAL' ? 'Sai số: ±1-3ms' : 'Sai số: Tắt'}
+                    </span>
+                  </button>
                   <span
                     className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
                       snapshot.timerResetReady
@@ -1675,7 +1705,7 @@ export default function App() {
           </button>
         )}
 
-        {/* Khi cả 2 menu đang tự ẩn trên điện thoại: Hiển thị thông số đồng hồ & nút Thả rơi siêu gọn ở góc trái trên để thao tác ngay trên cảnh 3D */}
+        {/* Khi cả 2 menu đang tự ẩn trên điện thoại: Hiển thị thông số đồng hồ, nút nhỏ Sai số & nút Thả rơi siêu gọn ở góc trái trên để thao tác ngay trên cảnh 3D */}
         {!isUiHiddenZen && !isLeftPanelOpen && (
           <div className="pointer-events-auto absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-slate-900/90 border border-slate-700 rounded-full pl-3 pr-1.5 py-1 shadow-xl">
             <span className="font-mono-tabular text-xs font-bold text-red-400">
@@ -1688,6 +1718,27 @@ export default function App() {
                     physicsConfig.timerScale
                   )} s`}
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                labSound.playSwitchClick(880);
+                updatePhysicsConfig({
+                  mode: physicsConfig.mode === 'EXPERIMENTAL' ? 'IDEAL' : 'EXPERIMENTAL',
+                });
+              }}
+              title={
+                physicsConfig.mode === 'EXPERIMENTAL'
+                  ? 'Đang bật sai số ngẫu nhiên ±1–3 phần nghìn giây. Nhấn để tắt.'
+                  : 'Đang tắt sai số (chế độ lí tưởng). Nhấn để bật sai số ±1–3 phần nghìn giây.'
+              }
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                physicsConfig.mode === 'EXPERIMENTAL'
+                  ? 'bg-amber-950/90 text-amber-300 border-amber-500/70'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              {physicsConfig.mode === 'EXPERIMENTAL' ? 'Sai số' : 'Sai số: Tắt'}
+            </button>
             <button
               type="button"
               onClick={handleReleaseCylinder}
@@ -2140,19 +2191,8 @@ export default function App() {
                     </h3>
 
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-xs text-slate-300">Chế độ mô phỏng:</span>
+                      <span className="text-xs text-slate-300">Sai số phép đo (phần nghìn giây):</span>
                       <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => updatePhysicsConfig({ mode: 'IDEAL' })}
-                          className={`min-h-[34px] px-2.5 py-1 rounded text-xs font-medium border ${
-                            physicsConfig.mode === 'IDEAL'
-                              ? 'bg-sky-600 text-white border-sky-400'
-                              : 'bg-slate-900 text-slate-300 border-slate-700'
-                          }`}
-                        >
-                          Lí tưởng (Không nhiễu)
-                        </button>
                         <button
                           type="button"
                           onClick={() => updatePhysicsConfig({ mode: 'EXPERIMENTAL' })}
@@ -2162,7 +2202,18 @@ export default function App() {
                               : 'bg-slate-900 text-slate-300 border-slate-700'
                           }`}
                         >
-                          Thực nghiệm có sai số
+                          Bật sai số (±1–3 phần nghìn giây)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updatePhysicsConfig({ mode: 'IDEAL' })}
+                          className={`min-h-[34px] px-2.5 py-1 rounded text-xs font-medium border ${
+                            physicsConfig.mode === 'IDEAL'
+                              ? 'bg-sky-600 text-white border-sky-400'
+                              : 'bg-slate-900 text-slate-300 border-slate-700'
+                          }`}
+                        >
+                          Tắt sai số (Lí tưởng 0 ms)
                         </button>
                       </div>
                     </div>

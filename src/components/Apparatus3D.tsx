@@ -183,14 +183,17 @@ function createHighResRulerTexture(maxAnisotropy: number): THREE.CanvasTexture {
   canvas.height = 2048;
   const ctx = canvas.getContext('2d')!;
 
+  // Nền thước màu đồng/ô-liu trung tính (medium warm bronze-ochre):
+  // - Khác màu rõ rệt với trụ giá đỡ (xanh thép trung tính)
+  // - Đủ sáng để tách biệt với vỏ đen của 2 cổng quang điện, nhưng vẫn trầm hơn quả nặng mạ crôm sáng bóng
   const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
-  grad.addColorStop(0, '#f1f5f9');
-  grad.addColorStop(0.5, '#ffffff');
-  grad.addColorStop(1, '#e2e8f0');
+  grad.addColorStop(0, '#44392b');
+  grad.addColorStop(0.5, '#544736');
+  grad.addColorStop(1, '#3b3124');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = '#475569';
+  ctx.strokeStyle = '#856d52';
   ctx.lineWidth = 4;
   ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
 
@@ -199,8 +202,6 @@ function createHighResRulerTexture(maxAnisotropy: number): THREE.CanvasTexture {
   const padBottom = 36;
   const usableHeight = canvas.height - padTop - padBottom;
 
-  ctx.fillStyle = '#0f172a';
-  ctx.strokeStyle = '#0f172a';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
 
@@ -211,27 +212,30 @@ function createHighResRulerTexture(maxAnisotropy: number): THREE.CanvasTexture {
 
     ctx.beginPath();
     if (isCm) {
+      const cmVal = mm / 10;
+      ctx.strokeStyle = cmVal === 0 ? '#38bdf8' : cmVal % 5 === 0 ? '#fde68a' : '#f1f5f9';
       ctx.lineWidth = 3.5;
       ctx.moveTo(canvas.width - 82, y);
       ctx.lineTo(canvas.width - 4, y);
       ctx.stroke();
 
-      const cmVal = mm / 10;
       if (cmVal % 5 === 0) {
         ctx.font = 'bold 30px "JetBrains Mono", monospace';
-        ctx.fillStyle = cmVal === 0 ? '#0284c7' : '#0f172a';
+        ctx.fillStyle = cmVal === 0 ? '#38bdf8' : '#fde68a';
         ctx.fillText(`${cmVal}`, canvas.width - 90, y);
       } else {
         ctx.font = '600 22px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#334155';
+        ctx.fillStyle = '#e2e8f0';
         ctx.fillText(`${cmVal}`, canvas.width - 88, y);
       }
     } else if (isHalfCm) {
+      ctx.strokeStyle = '#cbd5e1';
       ctx.lineWidth = 2.4;
       ctx.moveTo(canvas.width - 52, y);
       ctx.lineTo(canvas.width - 4, y);
       ctx.stroke();
     } else {
+      ctx.strokeStyle = '#9c8b78';
       ctx.lineWidth = 1.4;
       ctx.moveTo(canvas.width - 32, y);
       ctx.lineTo(canvas.width - 4, y);
@@ -240,7 +244,7 @@ function createHighResRulerTexture(maxAnisotropy: number): THREE.CanvasTexture {
   }
 
   ctx.save();
-  ctx.fillStyle = '#0284c7';
+  ctx.fillStyle = '#38bdf8';
   ctx.font = 'bold 26px "Plus Jakarta Sans", sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('cm', 16, padTop + 4);
@@ -652,6 +656,8 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     photogateLedMat: THREE.MeshStandardMaterial;
     steelCylinderGroup: THREE.Group;
     cylinderRingMat: THREE.MeshBasicMaterial;
+    catchTrayRimMat: THREE.MeshStandardMaterial;
+    catchTrayGlowRingMat: THREE.MeshBasicMaterial;
     magnetSnapPreviewRing: THREE.Mesh;
     velocityArrowGroup: THREE.Group;
     strobeInstancedMesh: THREE.InstancedMesh;
@@ -823,9 +829,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       metalness: 0.05,
     });
     const matCastIronBase = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.5,
-      metalness: 0.68,
+      color: 0x526880,
+      emissive: 0x1e293b,
+      emissiveIntensity: 0.16,
+      roughness: 0.38,
+      metalness: 0.65,
     });
     const matStainlessRod = new THREE.MeshPhysicalMaterial({
       color: 0xe2e8f0,
@@ -833,11 +841,34 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       roughness: 0.2,
       clearcoat: 0.2,
     });
+    // Trụ đứng của giá đỡ: màu bạc thép kim loại sáng (brushed metallic silver-steel) có ánh kim rõ nét
+    // để tách biệt hoàn toàn khỏi nền tối phía sau, khác màu với thước đo nâu đồng ấm và 2 cổng quang điện đen,
+    // đồng thời vẫn tôn nổi quả nặng có đai cam phát sáng khi rơi
+    const matStandPillar = new THREE.MeshPhysicalMaterial({
+      color: 0xa8bed4,
+      emissive: 0x334155,
+      emissiveIntensity: 0.26,
+      metalness: 0.72,
+      roughness: 0.22,
+      clearcoat: 0.45,
+      clearcoatRoughness: 0.15,
+    });
+    // Máng dây dọi bên trái: màu xám kim loại sáng vừa phải đồng bộ với trụ giá đỡ
+    const matPlumbChannel = new THREE.MeshStandardMaterial({
+      color: 0x6c849c,
+      emissive: 0x243447,
+      emissiveIntensity: 0.18,
+      roughness: 0.32,
+      metalness: 0.64,
+    });
+    // Quả nặng (Trụ thép rơi tự do): mạ crôm sáng rực + ánh phản quang nhẹ để cực kỳ nổi bật trên nền trụ & thước
     const matPolishedSteelCylinder = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
-      metalness: 0.92,
-      roughness: 0.1,
-      clearcoat: 0.5,
+      emissive: 0x38bdf8,
+      emissiveIntensity: 0.16,
+      metalness: 0.84,
+      roughness: 0.08,
+      clearcoat: 0.65,
     });
     const matBrass = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
@@ -989,7 +1020,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       standGroup.add(legSubGroup);
     });
 
-    const mainRod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.02, 24), matStainlessRod);
+    const mainRod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.02, 24), matStandPillar);
     mainRod.position.set(0, 0.53, 0);
     mainRod.castShadow = true;
     standGroup.add(mainRod);
@@ -1012,26 +1043,59 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     const catchTrayGroup = new THREE.Group();
     catchTrayGroup.position.set(DROP_LINE_X, 0.035, DROP_LINE_Z);
 
-    const trayRim = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.036, 0.026, 24), matClampAluminum);
+    const trayRim = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.036, 0.026, 28), matClampAluminum);
     trayRim.castShadow = true;
     trayRim.receiveShadow = true;
     catchTrayGroup.add(trayRim);
 
-    const trayPad = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.008, 24), matRubber);
+    const trayPad = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.008, 28), matRubber);
     trayPad.position.set(0, 0.011, 0);
     catchTrayGroup.add(trayPad);
+
+    // Viền phát sáng của đế tròn nhỏ hứng quả nặng:
+    // - Khi quả nặng chưa chạm: màu xanh lá (0x22c55e)
+    // - Khi quả nặng chạm đế: màu đỏ (0xef4444)
+    const catchTrayRimMat = new THREE.MeshStandardMaterial({
+      color: 0x22c55e,
+      emissive: 0x10b981,
+      emissiveIntensity: 0.85,
+      roughness: 0.25,
+      metalness: 0.3,
+    });
+    const trayRimBezel = new THREE.Mesh(
+      new THREE.TorusGeometry(0.0395, 0.0036, 16, 36),
+      catchTrayRimMat
+    );
+    trayRimBezel.rotation.x = Math.PI / 2;
+    trayRimBezel.position.set(0, 0.0135, 0);
+    catchTrayGroup.add(trayRimBezel);
+
+    const catchTrayGlowRingMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+    });
+    const trayRimTopRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.0345, 0.0435, 36),
+      catchTrayGlowRingMat
+    );
+    trayRimTopRing.rotation.x = Math.PI / 2;
+    trayRimTopRing.position.set(0, 0.0158, 0);
+    catchTrayGroup.add(trayRimTopRing);
+
     standGroup.add(catchTrayGroup);
 
     const rulerTex = createHighResRulerTexture(maxAniso);
     const rulerFrontMat = new THREE.MeshStandardMaterial({
       map: rulerTex,
-      roughness: 0.3,
-      metalness: 0.1,
+      roughness: 0.38,
+      metalness: 0.15,
     });
     const rulerSideMat = new THREE.MeshStandardMaterial({
-      color: 0xcbd5e1,
+      color: 0x574836,
       roughness: 0.4,
-      metalness: 0.6,
+      metalness: 0.48,
     });
     const rulerHeight = 0.872;
     const rulerMesh = new THREE.Mesh(
@@ -1064,16 +1128,16 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     // =========================================================================
     const plumbGroup = new THREE.Group();
 
-    const channelBack = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.92, 0.018), matClampAluminum);
+    const channelBack = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.92, 0.018), matPlumbChannel);
     channelBack.position.set(-0.042, 0.52, 0);
     channelBack.castShadow = true;
     plumbGroup.add(channelBack);
 
-    const flangeLeft = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.92, 0.014), matStainlessRod);
+    const flangeLeft = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.92, 0.014), matPlumbChannel);
     flangeLeft.position.set(-0.049, 0.52, 0.012);
     plumbGroup.add(flangeLeft);
 
-    const flangeRight = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.92, 0.014), matStainlessRod);
+    const flangeRight = new THREE.Mesh(new THREE.BoxGeometry(0.003, 0.92, 0.014), matPlumbChannel);
     flangeRight.position.set(-0.035, 0.52, 0.012);
     plumbGroup.add(flangeRight);
 
@@ -1208,13 +1272,13 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     steelCylinderGroup.add(cylMesh);
 
     const locatorBand = new THREE.Mesh(
-      new THREE.CylinderGeometry(CYLINDER_RADIUS + 0.0005, CYLINDER_RADIUS + 0.0005, 0.007, 28),
+      new THREE.CylinderGeometry(CYLINDER_RADIUS + 0.0006, CYLINDER_RADIUS + 0.0006, 0.0085, 28),
       new THREE.MeshStandardMaterial({
-        color: 0xf97316,
-        metalness: 0.4,
-        roughness: 0.25,
-        emissive: 0x9a3412,
-        emissiveIntensity: 0.45,
+        color: 0xff6b00,
+        metalness: 0.25,
+        roughness: 0.2,
+        emissive: 0xea580c,
+        emissiveIntensity: 0.68,
       })
     );
     locatorBand.position.y = CYLINDER_HEIGHT * 0.5;
@@ -1223,7 +1287,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     const cylinderRingMat = new THREE.MeshBasicMaterial({
       color: 0x38bdf8,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.9,
       side: THREE.DoubleSide,
     });
     const cylinderHighlighterRing = new THREE.Mesh(
@@ -1360,33 +1424,78 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     photogateAForkGroup.add(photogateAHighlightRing);
 
     const lensMatA = new THREE.MeshStandardMaterial({
-      color: 0xef4444,
-      emissive: 0x991b1b,
-      emissiveIntensity: 0.9,
-      roughness: 0.15,
+      color: 0xff4d4d,
+      emissive: 0xff1e1e,
+      emissiveIntensity: 2.4,
+      roughness: 0.1,
     });
     const emitterLensA = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0035, 0.0035, 0.004, 12),
+      new THREE.CylinderGeometry(0.0042, 0.0042, 0.0045, 16),
       lensMatA
     );
     emitterLensA.rotation.z = Math.PI / 2;
-    emitterLensA.position.set(-0.03, 0, DROP_LINE_Z);
+    emitterLensA.position.set(-0.0295, 0, DROP_LINE_Z);
     photogateAForkGroup.add(emitterLensA);
 
     const receiverLensA = emitterLensA.clone();
-    receiverLensA.position.set(0.03, 0, DROP_LINE_Z);
+    receiverLensA.position.set(0.0295, 0, DROP_LINE_Z);
     photogateAForkGroup.add(receiverLensA);
 
+    // Tia sáng quang học Cổng A: Lõi laser trắng-đỏ rực + hào quang lóa sáng (AdditiveBlending)
     const laserBeamAMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0014, 0.0014, 0.06, 12),
+      new THREE.CylinderGeometry(0.0017, 0.0017, 0.059, 16),
       new THREE.MeshBasicMaterial({
-        color: 0xef4444,
+        color: 0xfff1f2,
         transparent: true,
-        opacity: 0.65,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
       })
     );
     laserBeamAMesh.rotation.z = Math.PI / 2;
     laserBeamAMesh.position.set(0, 0, DROP_LINE_Z);
+
+    const laserGlowInnerA = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0042, 0.0042, 0.059, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xff2424,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    laserBeamAMesh.add(laserGlowInnerA);
+
+    const laserGlowOuterA = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0085, 0.0085, 0.059, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.38,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    laserBeamAMesh.add(laserGlowOuterA);
+
+    // Điểm lóa sáng (Lens Flare Halo) tại 2 đầu phát/thu tia hồng ngoại của Cổng A
+    const flareGeoA = new THREE.SphereGeometry(0.0072, 14, 14);
+    const flareMatA = new THREE.MeshBasicMaterial({
+      color: 0xff3b3b,
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const leftFlareA = new THREE.Mesh(flareGeoA, flareMatA);
+    leftFlareA.position.set(0, -0.028, 0);
+    laserBeamAMesh.add(leftFlareA);
+
+    const rightFlareA = new THREE.Mesh(flareGeoA, flareMatA);
+    rightFlareA.position.set(0, 0.028, 0);
+    laserBeamAMesh.add(rightFlareA);
+
     photogateAForkGroup.add(laserBeamAMesh);
 
     const triggerRingAMesh = new THREE.Mesh(
@@ -1502,30 +1611,75 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     photogateForkOffsetGroup.add(photogateHighlightRing);
 
     const lensMat = new THREE.MeshStandardMaterial({
-      color: 0xef4444,
-      emissive: 0x991b1b,
-      emissiveIntensity: 0.9,
-      roughness: 0.15,
+      color: 0xff4d4d,
+      emissive: 0xff1e1e,
+      emissiveIntensity: 2.4,
+      roughness: 0.1,
     });
-    const emitterLens = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.004, 12), lensMat);
+    const emitterLens = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.0045, 16), lensMat);
     emitterLens.rotation.z = Math.PI / 2;
-    emitterLens.position.set(-0.03, 0, DROP_LINE_Z);
+    emitterLens.position.set(-0.0295, 0, DROP_LINE_Z);
     photogateForkOffsetGroup.add(emitterLens);
 
     const receiverLens = emitterLens.clone();
-    receiverLens.position.set(0.03, 0, DROP_LINE_Z);
+    receiverLens.position.set(0.0295, 0, DROP_LINE_Z);
     photogateForkOffsetGroup.add(receiverLens);
 
+    // Tia sáng quang học Cổng B: Lõi laser trắng-đỏ rực + hào quang lóa sáng (AdditiveBlending)
     const laserBeamMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.0014, 0.0014, 0.06, 12),
+      new THREE.CylinderGeometry(0.0017, 0.0017, 0.059, 16),
       new THREE.MeshBasicMaterial({
-        color: 0xef4444,
+        color: 0xfff1f2,
         transparent: true,
-        opacity: 0.65,
+        opacity: 0.98,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
       })
     );
     laserBeamMesh.rotation.z = Math.PI / 2;
     laserBeamMesh.position.set(0, 0, DROP_LINE_Z);
+
+    const laserGlowInnerB = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0042, 0.0042, 0.059, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xff2424,
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    laserBeamMesh.add(laserGlowInnerB);
+
+    const laserGlowOuterB = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.0085, 0.0085, 0.059, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xef4444,
+        transparent: true,
+        opacity: 0.38,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    laserBeamMesh.add(laserGlowOuterB);
+
+    // Điểm lóa sáng (Lens Flare Halo) tại 2 đầu phát/thu tia hồng ngoại của Cổng B
+    const flareGeoB = new THREE.SphereGeometry(0.0072, 14, 14);
+    const flareMatB = new THREE.MeshBasicMaterial({
+      color: 0xff3b3b,
+      transparent: true,
+      opacity: 0.72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const leftFlareB = new THREE.Mesh(flareGeoB, flareMatB);
+    leftFlareB.position.set(0, -0.028, 0);
+    laserBeamMesh.add(leftFlareB);
+
+    const rightFlareB = new THREE.Mesh(flareGeoB, flareMatB);
+    rightFlareB.position.set(0, 0.028, 0);
+    laserBeamMesh.add(rightFlareB);
+
     photogateForkOffsetGroup.add(laserBeamMesh);
 
     const triggerRingMesh = new THREE.Mesh(
@@ -1957,6 +2111,8 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       photogateLedMat,
       steelCylinderGroup,
       cylinderRingMat,
+      catchTrayRimMat,
+      catchTrayGlowRingMat,
       magnetSnapPreviewRing,
       velocityArrowGroup,
       strobeInstancedMesh,
@@ -2435,16 +2591,30 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
             : DROP_ORIGIN_Y - snap.cylinderDropDistanceMeters;
         objs.steelCylinderGroup.position.set(DROP_LINE_X, targetCylinderY, DROP_LINE_Z);
 
-        if (objs.manualCylinderDragY !== null) {
-          objs.cylinderRingMat.color.setHex(
-            objs.manualCylinderDragY >= DROP_ORIGIN_Y - 0.08 ? 0x10b981 : 0xf59e0b
-          );
-        } else if (snap.phase === 'FALLING_TIMER_RUNNING') {
-          objs.cylinderRingMat.color.setHex(0x10b981);
-        } else if (snap.phase === 'PHOTOGATE_TRIGGERED') {
-          objs.cylinderRingMat.color.setHex(0xf59e0b);
+        // Kiểm tra quả nặng đã chạm vào đế tròn nhỏ hứng bên dưới chưa
+        const isTouchingCatchTray = targetCylinderY <= CATCH_TRAY_SURFACE_Y + 0.004;
+        if (isTouchingCatchTray) {
+          // Khi quả nặng chạm đế: viền đỏ rực
+          objs.catchTrayRimMat.color.setHex(0xef4444);
+          objs.catchTrayRimMat.emissive.setHex(0xdc2626);
+          objs.catchTrayRimMat.emissiveIntensity = 0.95;
+          objs.catchTrayGlowRingMat.color.setHex(0xef4444);
         } else {
-          objs.cylinderRingMat.color.setHex(0x38bdf8);
+          // Khi quả nặng chưa chạm đế: viền xanh lá
+          objs.catchTrayRimMat.color.setHex(0x22c55e);
+          objs.catchTrayRimMat.emissive.setHex(0x10b981);
+          objs.catchTrayRimMat.emissiveIntensity = 0.85;
+          objs.catchTrayGlowRingMat.color.setHex(0x22c55e);
+        }
+
+        if (isTouchingCatchTray) {
+          objs.cylinderRingMat.color.setHex(0xef4444);
+        } else if (objs.manualCylinderDragY !== null) {
+          objs.cylinderRingMat.color.setHex(
+            objs.manualCylinderDragY >= DROP_ORIGIN_Y - 0.08 ? 0x10b981 : 0x22c55e
+          );
+        } else {
+          objs.cylinderRingMat.color.setHex(0x22c55e);
         }
 
         if (
@@ -2521,7 +2691,12 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
           );
         }
 
+        const beamPulse = 1 + 0.16 * Math.sin(nowMs * 0.009);
         objs.laserBeamAMesh.visible = showGateA && snap.powerOn && snap.portAConnected;
+        if (objs.laserBeamAMesh.visible) {
+          const scaleA = snap.isBeamABlockedNow ? 1.45 : beamPulse;
+          objs.laserBeamAMesh.scale.set(scaleA, 1, scaleA);
+        }
         objs.triggerRingAMesh.visible =
           showGateA && (snap.isBeamABlockedNow || snap.portAState === 'ACTIVE');
 
@@ -2572,6 +2747,10 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
         }
 
         objs.laserBeamMesh.visible = showGateB && snap.powerOn && snap.photogateConnected;
+        if (objs.laserBeamMesh.visible) {
+          const scaleB = snap.isBeamBlockedNow ? 1.45 : beamPulse;
+          objs.laserBeamMesh.scale.set(scaleB, 1, scaleB);
+        }
         objs.triggerRingMesh.visible =
           showGateB && (snap.isBeamBlockedNow || snap.phase === 'PHOTOGATE_TRIGGERED');
 

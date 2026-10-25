@@ -657,8 +657,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     photogateLedMat: THREE.MeshStandardMaterial;
     steelCylinderGroup: THREE.Group;
     cylinderRingMat: THREE.MeshBasicMaterial;
+    trayPadMesh: THREE.Mesh;
     catchTrayRimMat: THREE.MeshStandardMaterial;
     catchTrayGlowRingMat: THREE.MeshBasicMaterial;
+    wasTouchingCatchTray: boolean;
+    trayImpactCompression: number;
     magnetSnapPreviewRing: THREE.Mesh;
     velocityArrowGroup: THREE.Group;
     strobeInstancedMesh: THREE.InstancedMesh;
@@ -2115,8 +2118,11 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       photogateLedMat,
       steelCylinderGroup,
       cylinderRingMat,
+      trayPadMesh: trayPad,
       catchTrayRimMat,
       catchTrayGlowRingMat,
+      wasTouchingCatchTray: false,
+      trayImpactCompression: 0,
       magnetSnapPreviewRing,
       velocityArrowGroup,
       strobeInstancedMesh,
@@ -2597,11 +2603,36 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
 
         // Kiểm tra quả nặng đã chạm vào đế tròn nhỏ hứng bên dưới chưa
         const isTouchingCatchTray = targetCylinderY <= CATCH_TRAY_SURFACE_Y + 0.004;
+        if (isTouchingCatchTray && !objs.wasTouchingCatchTray) {
+          objs.trayImpactCompression = 1.0;
+          // Nếu người dùng kéo tay chạm trụ thép xuống đệm khay hứng thì cũng phát âm thanh va chạm nhẹ
+          if (objs.manualCylinderDragY !== null) {
+            labSound.playCatchTrayThud(1.75);
+          }
+        }
+        objs.wasTouchingCatchTray = isTouchingCatchTray;
+
+        if (objs.trayImpactCompression > 0.001) {
+          objs.trayImpactCompression = THREE.MathUtils.damp(
+            objs.trayImpactCompression,
+            0,
+            18,
+            rawDt
+          );
+        } else {
+          objs.trayImpactCompression = 0;
+        }
+
+        // Hiệu ứng nén đàn hồi nhẹ riêng lớp đệm cao su bên trong khay hứng khi trụ thép chạm đáy (giá đỡ đứng yên tuyệt đối)
+        const padComp = objs.trayImpactCompression;
+        objs.trayPadMesh.scale.set(1 + padComp * 0.03, 1 - padComp * 0.28, 1 + padComp * 0.03);
+        objs.trayPadMesh.position.y = 0.011 - padComp * 0.0012;
+
         if (isTouchingCatchTray) {
-          // Khi quả nặng chạm đế: viền đỏ rực
+          // Khi quả nặng chạm đế: viền đỏ rực (lóe sáng mạnh lúc vừa va chạm rồi dịu về mức ổn định)
           objs.catchTrayRimMat.color.setHex(0xef4444);
           objs.catchTrayRimMat.emissive.setHex(0xdc2626);
-          objs.catchTrayRimMat.emissiveIntensity = 0.95;
+          objs.catchTrayRimMat.emissiveIntensity = 0.95 + padComp * 0.85;
           objs.catchTrayGlowRingMat.color.setHex(0xef4444);
         } else {
           // Khi quả nặng chưa chạm đế: viền xanh lá

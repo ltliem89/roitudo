@@ -210,7 +210,7 @@ export default function App() {
     }
   }, []);
 
-  // Phát hiện thời điểm trụ thép va chạm với khay nhận (đệm cao su đáy giá đỡ) để phản hồi xúc giác trên thiết bị di động
+  // Phát hiện thời điểm trụ thép va chạm với đệm khay hứng (đáy giá đỡ) để phát âm thanh va chạm vật lí & phản hồi xúc giác
   const prevHitCatchTrayRef = useRef(false);
   useEffect(() => {
     const hasHitCatchTrayNow =
@@ -219,7 +219,14 @@ export default function App() {
       snapshot.cylinderDropDistanceMeters >= physicsConfig.maxFallDistanceMeters - 1e-4;
 
     if (hasHitCatchTrayNow && !prevHitCatchTrayRef.current) {
-      // Rung xúc giác 2 nhịp mô phỏng tiếng "cộp" của trụ thép chạm đệm khay nhận (hệ thống giá 3D vẫn đứng yên tuyệt đối)
+      // Vận tốc chạm đệm khay hứng v = sqrt(2 * g * s_max) ≈ 4.07 m/s
+      const impactVelocity = Math.sqrt(
+        2 *
+          physicsConfig.trueGravity *
+          Math.max(0.05, snapshot.cylinderDropDistanceMeters)
+      );
+      labSound.playCatchTrayThud(impactVelocity);
+      // Rung xúc giác 2 nhịp mô phỏng tiếng "cộp-cụp" của trụ thép chạm đệm khay hứng (hệ thống giá 3D vẫn đứng yên tuyệt đối)
       triggerHapticFeedback([18, 25, 42]);
       prevHitCatchTrayRef.current = true;
     }
@@ -232,10 +239,11 @@ export default function App() {
     snapshot.isPeriodicSourceRunning,
     snapshot.cylinderDropDistanceMeters,
     physicsConfig.maxFallDistanceMeters,
+    physicsConfig.trueGravity,
     triggerHapticFeedback,
   ]);
 
-  // Phát âm thanh và tự động lưu vào lịch sử đồng hồ MC964 khi hoàn tất phép đo
+  // Phát âm thanh đồng hồ và tự động lưu vào lịch sử đồng hồ MC964 khi hoàn tất phép đo
   const prevPhaseRef = useRef(snapshot.phase);
   useEffect(() => {
     if (prevPhaseRef.current !== snapshot.phase) {
@@ -246,7 +254,6 @@ export default function App() {
         if (prevPhaseRef.current === 'FALLING_TIMER_RUNNING') {
           labSound.playTimerBeep(2500, 0.07);
         }
-        labSound.playCatchTrayThud();
 
         if (snapshot.completedMeasurementSeconds !== null) {
           const entry: TimerHistoryEntry = {
@@ -265,11 +272,21 @@ export default function App() {
           setTimerHistory((prev) => [entry, ...prev.slice(0, 19)]);
         }
       } else if (snapshot.phase === 'ERROR') {
-        labSound.playErrorTone();
+        const hitTrayAtError =
+          !snapshot.cylinderAttachedToMagnet &&
+          snapshot.cylinderDropDistanceMeters >= physicsConfig.maxFallDistanceMeters - 1e-4;
+        if (hitTrayAtError) {
+          // Nếu lỗi xảy ra lúc trụ thép chạm đáy khay hứng, phát tiếng va chạm khay trước rồi báo âm lỗi sau 115ms
+          window.setTimeout(() => {
+            labSound.playErrorTone();
+          }, 115);
+        } else {
+          labSound.playErrorTone();
+        }
       }
       prevPhaseRef.current = snapshot.phase;
     }
-  }, [snapshot, triggerHapticFeedback]);
+  }, [snapshot, physicsConfig.maxFallDistanceMeters, triggerHapticFeedback]);
 
   useEffect(() => {
     setDistanceInputStr(snapshot.photogateDistanceMeters.toFixed(3));

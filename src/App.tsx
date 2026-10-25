@@ -128,8 +128,8 @@ export default function App() {
 
   // Tốc độ hiển thị chuyển động rơi: Mặc định 0.25x (Quay chậm 4 lần)
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(0.25);
-  // Camera tự động bám theo vật rơi (đặt trong menu trái theo yêu cầu)
-  const [autoTrackFall, setAutoTrackFall] = useState<boolean>(true);
+  // Chế độ Camera bám quả nặng khi rơi: Mặc định TẮT để hệ thống giá đỡ đứng yên hoàn toàn, chỉ có quả nặng phát sáng nhẹ rơi xuống
+  const [autoTrackFall, setAutoTrackFall] = useState<boolean>(false);
   // Tự động đưa trụ lên nam châm & reset đồng hồ khi bấm "Nhả trụ thép"
   const [autoPrepareOnDrop, setAutoPrepareOnDrop] = useState<boolean>(true);
 
@@ -198,7 +198,6 @@ export default function App() {
     activeQualityLabel: 'AUTO',
   });
   const [testResults, setTestResults] = useState<AcceptanceTestResult[] | null>(null);
-  const [isCatchTrayImpactActive, setIsCatchTrayImpactActive] = useState(false);
 
   // Kích hoạt phản hồi xúc giác (Haptic Feedback) trên thiết bị hỗ trợ Web Vibration API
   const triggerHapticFeedback = useCallback((pattern: number | number[]) => {
@@ -211,7 +210,7 @@ export default function App() {
     }
   }, []);
 
-  // Phát hiện thời điểm trụ thép va chạm với khay nhận (đệm cao su đáy giá đỡ) để tạo hiệu ứng rung nhẹ chân thực
+  // Phát hiện thời điểm trụ thép va chạm với khay nhận (đệm cao su đáy giá đỡ) để phản hồi xúc giác trên thiết bị di động
   const prevHitCatchTrayRef = useRef(false);
   useEffect(() => {
     const hasHitCatchTrayNow =
@@ -220,14 +219,9 @@ export default function App() {
       snapshot.cylinderDropDistanceMeters >= physicsConfig.maxFallDistanceMeters - 1e-4;
 
     if (hasHitCatchTrayNow && !prevHitCatchTrayRef.current) {
-      // Rung xúc giác 2 nhịp mô phỏng tiếng "cộp" của trụ thép chạm đệm khay nhận
+      // Rung xúc giác 2 nhịp mô phỏng tiếng "cộp" của trụ thép chạm đệm khay nhận (hệ thống giá 3D vẫn đứng yên tuyệt đối)
       triggerHapticFeedback([18, 25, 42]);
-      setIsCatchTrayImpactActive(true);
-      const timer = window.setTimeout(() => {
-        setIsCatchTrayImpactActive(false);
-      }, 190);
       prevHitCatchTrayRef.current = true;
-      return () => window.clearTimeout(timer);
     }
 
     if (!hasHitCatchTrayNow) {
@@ -396,6 +390,17 @@ export default function App() {
     labSound.playSwitchClick(980);
     const next = controllerRef.current.cycleTimerMode();
     setSnapshot({ ...next });
+  }, []);
+
+  const handleToggleFollowCamera = useCallback(() => {
+    labSound.playSwitchClick(860);
+    setAutoTrackFall((prev) => {
+      const next = !prev;
+      setCameraPreset((curPreset) =>
+        next ? 'FOLLOW_CYLINDER' : curPreset === 'FOLLOW_CYLINDER' ? 'OVERVIEW' : curPreset
+      );
+      return next;
+    });
   }, []);
 
   const handleSimulationTick = useCallback((dt: number) => {
@@ -1432,20 +1437,22 @@ export default function App() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setAutoTrackFall((v) => !v)}
+                  onClick={handleToggleFollowCamera}
                   {...bindTooltip(
-                    'Camera tự động bám theo vật rơi',
-                    'Khi BẬT, camera 3D tự động căn chỉnh khoảng cách tối ưu và lia theo trụ thép trong suốt quá trình rơi từ nam châm xuống khay hứng.',
-                    'Tắt nếu bạn muốn giữ cố định một góc nhìn cận cảnh'
-                  )}
-                  className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 border transition-colors ${
+                    'Chế độ Camera bám quả nặng khi rơi',
+                    'Mặc định TẮT để hệ thống giá đỡ đứng yên hoàn toàn, chỉ có quả nặng phát sáng nhẹ rơi xuống. Khi BẬT chế độ này, camera 3D sẽ bám sát theo quả nặng suốt quá trình rơi qua Cổng A, Cổng B xuống đế hứng.',
                     autoTrackFall
-                      ? 'bg-emerald-600/90 text-white border-emerald-400'
-                      : 'bg-slate-800 text-slate-400 border-slate-700'
+                      ? 'Đang BẬT (Camera bám theo quả nặng) — Nhấn để cố định giá đỡ'
+                      : 'Đang TẮT (Giá đỡ đứng yên) — Nhấn để bật Camera bám quả nặng'
+                  )}
+                  className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 border transition-colors cursor-pointer ${
+                    autoTrackFall
+                      ? 'bg-emerald-600/90 hover:bg-emerald-500 text-white border-emerald-400 shadow'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
                   }`}
                 >
                   <Video className="w-3 h-3 shrink-0" />
-                  <span>{autoTrackFall ? 'Cam bám rơi: BẬT' : 'Cam bám rơi: TẮT'}</span>
+                  <span>{autoTrackFall ? 'Cam bám quả nặng: BẬT' : 'Cam bám quả nặng: TẮT'}</span>
                 </button>
               </div>
 
@@ -1628,11 +1635,7 @@ export default function App() {
           2. VÙNG MÔ PHỎNG 3D TRUNG TÂM (CAO 100% TỪ ĐỈNH ĐẾN ĐÁY MÀN HÌNH,
              CÓ NÚT TRÒN CON MẮT GÓC TRÊN PHẢI ĐỂ ẨN/HIỆN CHÚ THÍCH KHI CẦN)
       ===================================================================== */}
-      <main
-        className={`relative flex-1 h-full min-w-0 min-h-0 overflow-hidden ${
-          isCatchTrayImpactActive ? 'animate-catch-tray-impact' : ''
-        }`}
-      >
+      <main className="relative flex-1 h-full min-w-0 min-h-0 overflow-hidden">
         <Apparatus3D
           snapshot={snapshot}
           physicsConfig={physicsConfig}
@@ -1738,6 +1741,23 @@ export default function App() {
               }`}
             >
               {physicsConfig.mode === 'EXPERIMENTAL' ? 'Sai số' : 'Sai số: Tắt'}
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleFollowCamera}
+              title={
+                autoTrackFall
+                  ? 'Đang bật chế độ Camera bám quả nặng khi rơi. Nhấn để tắt (giữ giá đỡ đứng yên).'
+                  : 'Đang giữ giá đỡ đứng yên. Nhấn để bật chế độ Camera bám quả nặng khi rơi.'
+              }
+              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border transition-colors flex items-center gap-1 ${
+                autoTrackFall
+                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/70'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              <Video className="w-2.5 h-2.5 shrink-0" />
+              <span>{autoTrackFall ? 'Cam bám' : 'Cam tĩnh'}</span>
             </button>
             <button
               type="button"
@@ -2667,28 +2687,63 @@ export default function App() {
               })}
             </div>
 
-            {/* KHỐI 3: CHỌN NHANH GÓC NHÌN CAMERA (XẾP DỌC) */}
+            {/* KHỐI 3: CHỌN NHANH GÓC NHÌN CAMERA & CHẾ ĐỘ BÁM QUẢ NẶNG KHI RƠI */}
             <div className="p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
-                <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>Góc nhìn 3D:</span>
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-300">
+                <div className="flex items-center gap-1.5">
+                  <Camera className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Góc nhìn 3D:</span>
+                </div>
+                <span className="text-[9px] font-mono-tabular text-slate-400">
+                  {autoTrackFall || cameraPreset === 'FOLLOW_CYLINDER' ? 'Đang bám rơi' : 'Giá đứng yên'}
+                </span>
               </div>
+
+              {/* Nút chuyên biệt: Chế độ Camera bám quả nặng khi rơi */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleToggleFollowCamera();
+                  if (checkIsMobileViewport()) setIsRightPanelOpen(false);
+                }}
+                {...bindTooltip(
+                  'Chế độ Camera bám quả nặng khi rơi',
+                  'Camera tự động lấy nét vào quả nặng phát sáng và trượt bám theo quả nặng từ nam châm điện qua Cổng A, Cổng B xuống tận đế hứng.',
+                  autoTrackFall || cameraPreset === 'FOLLOW_CYLINDER'
+                    ? 'Đang BẬT — Nhấn lại hoặc chọn góc nhìn dưới để giữ giá đỡ đứng yên'
+                    : 'Đang TẮT (Mặc định hệ thống giá đứng yên khi quả nặng rơi)',
+                  'left'
+                )}
+                className={`w-full min-h-[30px] px-2 py-1 rounded-lg text-[11px] font-semibold border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  autoTrackFall || cameraPreset === 'FOLLOW_CYLINDER'
+                    ? 'bg-emerald-600 text-white border-emerald-300 shadow-md'
+                    : 'bg-slate-900 hover:bg-slate-800 text-emerald-300 border-emerald-700/50'
+                }`}
+              >
+                <Video className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {autoTrackFall || cameraPreset === 'FOLLOW_CYLINDER'
+                    ? 'Bám quả nặng khi rơi: BẬT'
+                    : 'Bám quả nặng khi rơi'}
+                </span>
+              </button>
+
               <div className="grid grid-cols-2 gap-1">
                 {(
                   [
                     {
                       id: 'OVERVIEW',
-                      label: 'Trọn bộ',
-                      tipTitle: 'Góc nhìn Trọn bộ thí nghiệm',
+                      label: 'Trọn bộ (Tĩnh)',
+                      tipTitle: 'Góc nhìn Trọn bộ thí nghiệm (Giá đứng yên)',
                       tipDesc:
-                        'Quan sát toàn cảnh giá đỡ, nam châm điện, cổng quang A/B, công tắc kép và đồng hồ hiện số MC964.',
+                        'Giữ hệ thống giá đỡ đứng yên hoàn toàn, chỉ có quả nặng phát sáng nhẹ rơi xuống để dễ quan sát toàn cảnh.',
                     },
                     {
                       id: 'MEASUREMENT_ANGLE',
                       label: 'Đọc thước',
                       tipTitle: 'Góc nhìn trực diện Đọc thước (Chống sai số thị sai)',
                       tipDesc:
-                        'Đặt mắt vuông góc với mặt phẳng thước chia milimet để đọc chính xác vị trí cổng quang điện.',
+                        'Đặt mắt vuông góc cố định với mặt phẳng thước chia milimet để đọc chính xác vị trí cổng quang điện.',
                     },
                     {
                       id: 'CLOSEUP_PHOTOGATE',
@@ -2729,12 +2784,13 @@ export default function App() {
                     key={preset.id}
                     type="button"
                     onClick={() => {
+                      setAutoTrackFall(false);
                       setCameraPreset(preset.id);
                       if (checkIsMobileViewport()) setIsRightPanelOpen(false);
                     }}
                     {...bindTooltip(preset.tipTitle, preset.tipDesc, undefined, 'left')}
                     className={`min-h-[28px] px-1.5 py-1 rounded text-[11px] font-medium border truncate ${
-                      cameraPreset === preset.id
+                      !autoTrackFall && cameraPreset === preset.id
                         ? 'bg-sky-600 text-white border-sky-400 font-semibold'
                         : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                     }`}

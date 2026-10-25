@@ -15,6 +15,7 @@ export type EquipmentId =
 
 export type CameraPresetId =
   | 'OVERVIEW'
+  | 'FOLLOW_CYLINDER'
   | 'MEASUREMENT_ANGLE'
   | 'CLOSEUP_MAGNET'
   | 'CLOSEUP_PHOTOGATE'

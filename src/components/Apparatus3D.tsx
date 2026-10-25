@@ -83,6 +83,7 @@ const CAMERA_PRESETS: Record<
   { pos: [number, number, number]; target: [number, number, number] }
 > = {
   OVERVIEW: { pos: [0.38, 0.52, 1.56], target: [0.03, 0.50, 0.05] },
+  FOLLOW_CYLINDER: { pos: [0.22, 0.92, 0.54], target: [0.0, 0.916, 0.065] },
   MEASUREMENT_ANGLE: { pos: [0.0, 0.50, 1.48], target: [0.0, 0.50, 0.04] },
   CLOSEUP_MAGNET: { pos: [0.25, 0.76, 0.38], target: [0.0, 0.75, 0.065] },
   CLOSEUP_PHOTOGATE: { pos: [0.25, 0.48, 0.36], target: [0.0, 0.45, 0.065] },
@@ -861,14 +862,16 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
       roughness: 0.32,
       metalness: 0.64,
     });
-    // Quả nặng (Trụ thép rơi tự do): mạ crôm sáng rực + ánh phản quang nhẹ để cực kỳ nổi bật trên nền trụ & thước
+    // Quả nặng (Trụ thép rơi tự do): bề mặt thép mạ crôm sáng bóng phản xạ ánh sáng tự nhiên (không phát sáng như đèn)
     const matPolishedSteelCylinder = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
-      emissive: 0x38bdf8,
-      emissiveIntensity: 0.16,
+      color: 0xf8fafc,
+      emissive: 0xe2e8f0,
+      emissiveIntensity: 0.08,
       metalness: 0.84,
-      roughness: 0.08,
-      clearcoat: 0.65,
+      roughness: 0.12,
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.08,
+      reflectivity: 1.0,
     });
     const matBrass = new THREE.MeshStandardMaterial({
       color: 0xf59e0b,
@@ -1272,26 +1275,26 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
     steelCylinderGroup.add(cylMesh);
 
     const locatorBand = new THREE.Mesh(
-      new THREE.CylinderGeometry(CYLINDER_RADIUS + 0.0006, CYLINDER_RADIUS + 0.0006, 0.0085, 28),
+      new THREE.CylinderGeometry(CYLINDER_RADIUS + 0.0005, CYLINDER_RADIUS + 0.0005, 0.007, 28),
       new THREE.MeshStandardMaterial({
-        color: 0xff6b00,
-        metalness: 0.25,
-        roughness: 0.2,
-        emissive: 0xea580c,
-        emissiveIntensity: 0.68,
+        color: 0xea580c,
+        metalness: 0.35,
+        roughness: 0.25,
+        emissive: 0x9a3412,
+        emissiveIntensity: 0.08,
       })
     );
     locatorBand.position.y = CYLINDER_HEIGHT * 0.5;
     steelCylinderGroup.add(locatorBand);
 
     const cylinderRingMat = new THREE.MeshBasicMaterial({
-      color: 0x38bdf8,
+      color: 0x94a3b8,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.4,
       side: THREE.DoubleSide,
     });
     const cylinderHighlighterRing = new THREE.Mesh(
-      new THREE.RingGeometry(CYLINDER_RADIUS + 0.004, CYLINDER_RADIUS + 0.009, 32),
+      new THREE.RingGeometry(CYLINDER_RADIUS + 0.0025, CYLINDER_RADIUS + 0.0055, 32),
       cylinderRingMat
     );
     cylinderHighlighterRing.rotation.x = Math.PI / 2;
@@ -1326,6 +1329,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
 
     steelCylinderGroup.position.set(DROP_LINE_X, DROP_ORIGIN_Y, DROP_LINE_Z);
     registerInteractive(steelCylinderGroup, 'STEEL_CYLINDER', 'DRAG_CYLINDER', 'CYLINDER');
+
     scene.add(steelCylinderGroup);
 
     const strobeMat = new THREE.MeshStandardMaterial({
@@ -2614,7 +2618,7 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
             objs.manualCylinderDragY >= DROP_ORIGIN_Y - 0.08 ? 0x10b981 : 0x22c55e
           );
         } else {
-          objs.cylinderRingMat.color.setHex(0x22c55e);
+          objs.cylinderRingMat.color.setHex(0x94a3b8);
         }
 
         if (
@@ -2824,7 +2828,10 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
         }
 
         // =====================================================================
-        // 5. CAMERA TỰ ĐỘNG ĐIỀU CHỈNH KHOẢNG CÁCH & GÓC NHÌN TỐI ƯU KHI VẬT RƠI
+        // 5. ĐIỀU KHIỂN CAMERA:
+        //    - Mặc định: Hệ thống giá đỡ đứng yên hoàn toàn, chỉ có quả nặng phát sáng nhẹ rơi xuống.
+        //    - Khi bật "Chế độ Camera bám quả nặng khi rơi" (FOLLOW_CYLINDER / autoTrackFall):
+        //      Camera tự động bám sát theo vị trí quả nặng trong suốt quá trình rơi.
         // =====================================================================
         if (objs.activeCameraPreset !== props.cameraPreset) {
           objs.activeCameraPreset = props.cameraPreset;
@@ -2833,43 +2840,62 @@ export const Apparatus3D: React.FC<Apparatus3DProps> = ({
 
         const isFallingNow =
           snap.phase === 'FALLING_TIMER_RUNNING' || snap.phase === 'PHOTOGATE_TRIGGERED';
+        const isFollowMode =
+          autoTrackFallRef.current || props.cameraPreset === 'FOLLOW_CYLINDER';
 
-        if (autoTrackFallRef.current && isFallingNow && !isUserControllingCamera) {
+        if (
+          isFollowMode &&
+          !isUserControllingCamera &&
+          currentDragTarget === 'NONE'
+        ) {
           objs.isTransitioningCamera = false;
 
-          const overviewPose = computeFullApparatusOverviewPose(camera.fov, camera.aspect);
-          const trackedTargetY = THREE.MathUtils.lerp(0.50, targetCylinderY, 0.18);
-
-          _camTargetLook.set(0.03, Math.max(0.42, Math.min(0.56, trackedTargetY)), 0.05);
-          _camTargetPos.set(
-            overviewPose.pos[0],
-            _camTargetLook.y + 0.02,
-            overviewPose.pos[2]
+          const cylCenterY = Math.max(
+            0.065,
+            Math.min(0.92, targetCylinderY + CYLINDER_HEIGHT * 0.5)
           );
+          _camTargetLook.set(DROP_LINE_X, cylCenterY, DROP_LINE_Z);
+          _camTargetPos.set(0.22, cylCenterY + 0.025, 0.54);
 
-          camera.position.x = THREE.MathUtils.damp(camera.position.x, _camTargetPos.x, 5.5, rawDt);
-          camera.position.y = THREE.MathUtils.damp(camera.position.y, _camTargetPos.y, 6.5, rawDt);
-          camera.position.z = THREE.MathUtils.damp(camera.position.z, _camTargetPos.z, 5.5, rawDt);
+          const trackLambda = isFallingNow ? 18 : 8.5;
+          camera.position.x = THREE.MathUtils.damp(
+            camera.position.x,
+            _camTargetPos.x,
+            trackLambda,
+            rawDt
+          );
+          camera.position.y = THREE.MathUtils.damp(
+            camera.position.y,
+            _camTargetPos.y,
+            trackLambda,
+            rawDt
+          );
+          camera.position.z = THREE.MathUtils.damp(
+            camera.position.z,
+            _camTargetPos.z,
+            trackLambda,
+            rawDt
+          );
 
           controls.target.x = THREE.MathUtils.damp(
             controls.target.x,
             _camTargetLook.x,
-            6.5,
+            trackLambda,
             rawDt
           );
           controls.target.y = THREE.MathUtils.damp(
             controls.target.y,
             _camTargetLook.y,
-            7.5,
+            trackLambda,
             rawDt
           );
           controls.target.z = THREE.MathUtils.damp(
             controls.target.z,
             _camTargetLook.z,
-            6.5,
+            trackLambda,
             rawDt
           );
-        } else if (objs.isTransitioningCamera) {
+        } else if (objs.isTransitioningCamera && !isUserControllingCamera) {
           const targetPreset =
             props.cameraPreset === 'OVERVIEW'
               ? computeFullApparatusOverviewPose(camera.fov, camera.aspect)
